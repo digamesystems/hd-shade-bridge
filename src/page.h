@@ -21,7 +21,8 @@ h1{font-size:21px;margin:0;letter-spacing:-.01em}
 .net{color:var(--mute);font-size:13px}
 .banner{background:var(--warn-bg);color:var(--warn);border-radius:10px;padding:8px 12px;font-size:13px;margin-bottom:14px}
 h2{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--mute);margin:22px 0 8px}
-.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}
+.h2row{display:flex;align-items:center;justify-content:space-between;margin:22px 0 8px}
+.h2row h2{margin:0}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
 .row{display:flex;align-items:center;gap:8px}
 .card h3{font-size:16px;margin:0;flex:1}
@@ -30,12 +31,11 @@ padding:9px 14px;min-width:66px;min-height:42px;cursor:pointer;touch-action:mani
 button:hover{border-color:var(--mute)}
 button:active{transform:translateY(1px)}
 button.ghost{background:none;min-width:0;padding:6px 10px;min-height:0;font-size:13px}
+button.pri{background:var(--acc);border-color:var(--acc);color:var(--acc-ink);font-weight:600}
 .cols{display:grid;gap:8px;grid-template-columns:repeat(4,minmax(0,1fr))}
 .col{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 8px}
-.col h3{flex:none;font-size:15px}
-.col button{width:100%;min-width:0;padding:9px 4px}
-.type{font-size:11px;color:var(--mute);margin-top:-4px}
-.end{font-size:11px;font-weight:600;color:var(--mute);letter-spacing:.03em}
+.col h3{flex:none;font-size:15px;white-space:nowrap}
+.type{font-size:11px;color:var(--mute);margin-top:-4px;text-align:center}
 /* The window is the control: drag the fabric's rail up or down. Fabric hangs from the
    top (top-down) or rises from the bottom (bottom-up). */
 .win{position:relative;width:100%;max-width:84px;height:240px;border:2px solid var(--line);border-radius:6px;
@@ -51,18 +51,29 @@ background:repeating-linear-gradient(0deg,var(--fab) 0 7px,var(--fab2) 7px 8px)}
 background:var(--rail);box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .fab.td::after{bottom:-6px}
 .fab.bu::after{top:-6px}
-.all{margin-top:8px}
-.all .row button{min-width:92px}
-.val{font-variant-numeric:tabular-nums;font-size:13px;color:var(--mute)}
-.val b{color:var(--ink);font-weight:600}
+.val{font-variant-numeric:tabular-nums;font-size:13px;color:var(--mute);white-space:nowrap}
+.col .val{font-size:15px;font-weight:600;color:var(--ink)}
 .hint{color:var(--mute);font-size:12px;margin:10px 0 0}
-.presets{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
-.presets button{text-align:left;padding:10px 12px}
+.presets{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.presets button{text-align:left;padding:10px 12px;overflow-wrap:anywhere}
 .presets small{display:block;color:var(--mute);font-size:12px;margin-top:2px}
+.presets.editing button{border-color:var(--err);color:var(--err)}
+.presets.editing button::before{content:"✕ "}
+.empty{color:var(--mute);font-size:13px}
+details.save{margin-top:10px;padding:0}
+details.save summary{padding:12px 14px;cursor:pointer;font-weight:600}
+details.save form{padding:0 14px 14px}
+label.name{display:block;font-size:13px;color:var(--mute)}
+input[type=text]{display:block;width:100%;margin-top:4px;font:inherit;color:var(--ink);background:var(--bg);
+border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+.pick{display:flex;flex-wrap:wrap;gap:8px 16px;margin:12px 0}
+.pick label{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.pick label.off{color:var(--mute)}
+.pick input{width:18px;height:18px;margin:0}
+.err{color:var(--err);font-size:13px;min-height:1.2em;margin-top:6px}
 .bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin:10px 0 4px}
 .bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .4s linear}
 #now{font-weight:600}
-#msg{color:var(--err);font-size:13px;min-height:1.2em;margin-top:6px}
 ol{list-style:none;margin:10px 0 0;padding:10px 0 0;border-top:1px solid var(--line);
 font:12px/1.55 ui-monospace,Consolas,monospace;color:var(--mute);max-height:230px;overflow:auto}
 </style></head><body><main>
@@ -72,66 +83,73 @@ frames are printed on the serial console instead of transmitted.</div>
 
 <h2>Groups</h2>
 <div class="cols" id="groups"></div>
-<div class="card all" id="allcard"></div>
 <p class="hint">Drag a shade's rail (or tap where you want it) and let go to send; each move takes about 1.8 s
-on air. Positions are the rail's height, 0 at the bottom to 255 at the top, and show what was last sent: the
-shades don't report back.</p>
+on air. The percentage is how much of the window the fabric covers. It shows what was last sent: the shades
+don't report back.</p>
 
-<h2>Presets</h2>
+<div class="h2row"><h2>Presets</h2><button class="ghost" id="edit">Edit</button></div>
 <div class="presets" id="presets"></div>
+<p class="hint" id="edithint" hidden>Tap a preset to delete it. Tap Done when finished.</p>
+<details class="card save" id="save">
+<summary>Save current positions as a preset</summary>
+<form id="saveform" autocomplete="off">
+<label class="name">Name<input type="text" id="pname" maxlength="24" placeholder="e.g. Movie night"></label>
+<div class="pick" id="pick"></div>
+<button type="submit" class="pri">Save preset</button>
+<div class="err" id="saveerr"></div>
+<p class="hint">Saves the positions last sent to the ticked groups. Untick a group to leave it alone when the
+preset runs.</p>
+</form>
+</details>
 
 <h2>Activity</h2>
 <div class="card">
 <div class="row"><span id="now" style="flex:1">Idle</span><button class="ghost" id="clear">Clear queue</button></div>
 <div class="bar"><i id="bar"></i></div>
 <div class="val" id="qinfo">&nbsp;</div>
-<div id="msg"></div>
+<div class="err" id="msg"></div>
 <ol id="log"></ol>
 </div>
 </main>
 <script>
 const $=s=>document.querySelector(s);
+const G=[1,2,3,4];
 const touched={};
-function note(t){$('#msg').textContent=t||'';}
-async function post(path,data){
-  note('');
+// POST a form; errors go to `errEl` (the Activity card's line by default). Returns the reply.
+async function post(path,data,errEl){
+  const el=errEl||$('#msg');el.textContent='';
+  let j;
   try{
     const r=await fetch(path,{method:'POST',body:new URLSearchParams(data)});
-    const j=await r.json().catch(()=>({ok:r.ok}));
-    if(!j.ok) note(j.error||('Request failed ('+r.status+')'));
-  }catch(e){note('No response from the bridge');}
+    j=await r.json().catch(()=>({ok:r.ok}));
+    if(!j.ok) el.textContent=j.error||('Request failed ('+r.status+')');
+  }catch(e){j={ok:false};el.textContent='No response from the bridge';}
   refresh();
-}
-function wire(el,g){
-  el.querySelectorAll('button').forEach(b=>b.onclick=()=>post('/api/grp',{group:g,dir:b.dataset.d}));
+  return j;
 }
 const types={};  // group -> 'top-down' | 'bottom-up', from /api/groups
-// Show a position (rail height 0..255, or -1 unknown) on a group's column.
+// Share of the window the fabric covers, 0..100, for rail height p (0 bottom .. 255 top).
+const pct=(g,p)=>Math.round(100*(types[g]==='top-down'?255-p:p)/255);
 const cur={};    // group -> position shown (rail height 0..255), -1 unknown
 function show(g,p){
-  const td=types[g]==='top-down', v=$('#v'+g), f=$('#f'+g), w=$('#w'+g);
+  const v=$('#v'+g), f=$('#f'+g), w=$('#w'+g);
   cur[g]=p;
-  if(p<0){v.textContent='unknown';v.title='';f.style.height='0';w.removeAttribute('aria-valuenow');return;}
-  const closed=Math.round(100*(td?255-p:p)/255);  // share of the window covered
-  const txt=closed===0?'Open':closed===100?'Closed':closed+'% closed';
-  v.innerHTML=closed===0||closed===100?'<b>'+txt+'</b>':'<b>'+closed+'%</b> closed';
-  v.title='position '+p;
-  f.style.height=closed+'%';
-  w.setAttribute('aria-valuenow',p);w.setAttribute('aria-valuetext',txt);
+  if(p<0){v.textContent='?';v.title='Position unknown';f.style.height='0';
+    w.removeAttribute('aria-valuenow');w.removeAttribute('aria-valuetext');return;}
+  const c=pct(g,p);
+  v.textContent=c+'%';
+  v.title=c+'% closed (position '+p+')';
+  f.style.height=c+'%';
+  w.setAttribute('aria-valuenow',p);w.setAttribute('aria-valuetext',c+'% closed');
 }
 function send(g){touched[g]=Date.now();post('/api/pos',{group:g,pos:cur[g]});}
 function column(g){
   const td=types[g]==='top-down';
   const el=document.createElement('div');el.className='card col';
-  el.innerHTML='<h3>Group '+g+'</h3><span class="type">'+(td?'Top-down':'Bottom-up')+'</span>'+
+  el.innerHTML='<h3>GRP '+g+'</h3><span class="type">'+(td?'Top-down':'Bottom-up')+'</span>'+
     '<span class="val" id="v'+g+'">—</span>'+
-    '<button data-d="up">▲ Up</button>'+
-    '<span class="end">'+(td?'OPEN':'CLOSED')+'</span>'+
     '<div class="win" id="w'+g+'" tabindex="0" role="slider" aria-orientation="vertical" aria-valuemin="0"'+
-    ' aria-valuemax="255" aria-label="Group '+g+' position"><div class="fab '+(td?'td':'bu')+'" id="f'+g+'"></div></div>'+
-    '<span class="end">'+(td?'CLOSED':'OPEN')+'</span>'+
-    '<button data-d="down">▼ Down</button>';
-  wire(el,g);
+    ' aria-valuemax="255" aria-label="GRP '+g+' position"><div class="fab '+(td?'td':'bu')+'" id="f'+g+'"></div></div>';
   const w=el.querySelector('.win');
   // Pointer: press anywhere in the window to put the rail there, drag, send on release.
   const at=e=>{const r=w.getBoundingClientRect();
@@ -153,25 +171,65 @@ function column(g){
   };
   return el;
 }
+
+// --- presets ---
+let presets=[], editing=false;
+// "G4 100%, G2 0%": each step's groups at that step's position.
+const stepText=steps=>steps.map(([m,p])=>G.filter(g=>m&(1<<(g-1))).map(g=>'G'+g+' '+pct(g,p)+'%').join(', ')).join(', ');
+function renderPresets(){
+  const box=$('#presets');box.textContent='';
+  box.classList.toggle('editing',editing);
+  if(!presets.length){const e=document.createElement('div');e.className='empty';
+    e.textContent='No presets yet. Set the shades above, then save their positions below.';box.appendChild(e);}
+  presets.forEach(p=>{
+    const b=document.createElement('button'), s=document.createElement('small');
+    b.append(p.name);s.textContent=stepText(p.steps);b.appendChild(s);
+    b.onclick=async()=>{
+      if(!editing){post('/api/preset',{name:p.name});return;}
+      if(!confirm('Delete preset "'+p.name+'"?'))return;
+      if((await post('/api/preset/delete',{name:p.name})).ok) loadPresets();
+    };
+    box.appendChild(b);
+  });
+}
+function loadPresets(){
+  return fetch('/api/presets').then(r=>r.json()).then(list=>{presets=list;renderPresets();}).catch(()=>{});
+}
+$('#edit').onclick=()=>{
+  editing=!editing;$('#edit').textContent=editing?'Done':'Edit';$('#edithint').hidden=!editing;renderPresets();
+};
+$('#pick').innerHTML=G.map(g=>'<label id="pl'+g+'"><input type="checkbox" id="pk'+g+'" checked> GRP '+g+
+  ' <span class="val" id="pv'+g+'"></span></label>').join('');
+// Tick boxes follow what's known: a group with no position sent can't be saved.
+function updatePick(pos){
+  pos.forEach((p,i)=>{
+    const g=i+1, k=$('#pk'+g), known=p>=0;
+    if(!known)k.checked=false;else if(k.disabled)k.checked=true;
+    k.disabled=!known;$('#pl'+g).classList.toggle('off',!known);
+    $('#pv'+g).textContent=known?pct(g,p)+'%':'not set';
+  });
+}
+$('#saveform').onsubmit=async e=>{
+  e.preventDefault();
+  const err=$('#saveerr'), name=$('#pname').value.trim();
+  let groups=0;G.forEach(g=>{if($('#pk'+g).checked)groups|=1<<(g-1);});
+  if(!name){err.textContent='Enter a name';return;}
+  if(!groups){err.textContent='Tick at least one group';return;}
+  const data={name,groups};
+  const old=presets.find(p=>p.name.toLowerCase()===name.toLowerCase());
+  if(old){if(!confirm('Replace preset "'+old.name+'"?'))return;data.replace=1;}
+  if((await post('/api/preset/save',data,err)).ok){
+    $('#pname').value='';$('#save').open=false;loadPresets();
+  }
+};
+
 fetch('/api/groups').then(r=>r.json()).catch(()=>[]).then(list=>{
   list.forEach(x=>types[x.group]=x.type);
-  [1,2,3,4].forEach(g=>$('#groups').appendChild(column(g)));
+  G.forEach(g=>$('#groups').appendChild(column(g)));
+  loadPresets();  // after the types: preset steps are shown as %
   refresh();
 });
-$('#allcard').innerHTML='<div class="row"><h3>All groups</h3>'+
-  '<button data-d="up">▲ Up</button><button data-d="down">▼ Down</button></div>'+
-  '<p class="hint" style="margin-top:6px">Position is set per group.</p>';
-wire($('#allcard'),'all');
 $('#clear').onclick=()=>post('/api/clear',{});
-
-fetch('/api/presets').then(r=>r.json()).then(list=>{
-  list.forEach(p=>{
-    const b=document.createElement('button');
-    b.innerHTML=p.name[0].toUpperCase()+p.name.slice(1)+'<small>'+p.steps+'</small>';
-    b.onclick=()=>post('/api/preset',{name:p.name});
-    $('#presets').appendChild(b);
-  });
-});
 
 const secs=ms=>(ms/1000).toFixed(1)+' s';
 async function refresh(){
@@ -184,9 +242,10 @@ async function refresh(){
     if(!w||w.classList.contains('drag')||Date.now()-(touched[g]||0)<3000) return;  // don't fight the user's finger
     show(g,p);
   });
+  updatePick(s.pos);
   $('#now').textContent=s.current?'Sending: '+s.current:'Idle';
   $('#bar').style.width=s.cur_total_ms?(100*(1-s.cur_left_ms/s.cur_total_ms))+'%':'0';
-  $('#qinfo').textContent=s.busy?(s.queued+' queued · '+secs(s.remaining_ms)+' to go'):' ';
+  $('#qinfo').textContent=s.busy?(s.queued+' queued · '+secs(s.remaining_ms)+' to go'):' ';
   $('#log').innerHTML=s.log.slice().reverse().map(l=>'<li>'+l.replace(/</g,'&lt;')+'</li>').join('');
 }
 setInterval(()=>{if(!document.hidden)refresh();},1000);

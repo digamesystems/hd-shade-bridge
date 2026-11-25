@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "txqueue.h"
+#include <Preferences.h>
 #include <stdarg.h>
 
 namespace txq {
@@ -25,18 +26,30 @@ struct Job {
 struct PosStep {
   uint8_t mask, pos;
 };
+// One step per distinct position, so at most one per group.
+static const int MAX_PRESET_STEPS = 4;
 struct Preset {
-  const char *name;
-  PosStep steps[3];
+  char name[PRESET_NAME_MAX + 1];
   uint8_t n;
+  PosStep steps[MAX_PRESET_STEPS];
 };
-// Same values as the HD firmware's bedtime / waketime / sunset commands.
-static const Preset PRESETS[] = {
-    {"bedtime", {{0x08, 255}, {0x02, 255}}, 2},
-    {"waketime", {{0x08, 128}, {0x02, 40}, {0x05, 255}}, 3},
-    {"sunset", {{0x01, 100}, {0x04, 50}}, 2},
+// Seeded on first boot: the same values as the HD firmware's bedtime /
+// waketime / sunset commands.
+static const Preset DEFAULT_PRESETS[] = {
+    {"Bedtime", 2, {{0x08, 255}, {0x02, 255}}},
+    {"Waketime", 3, {{0x08, 128}, {0x02, 40}, {0x05, 255}}},
+    {"Sunset", 2, {{0x01, 100}, {0x04, 50}}},
 };
-static const int NPRESETS = sizeof(PRESETS) / sizeof(PRESETS[0]);
+
+// Stored as one fixed-size blob, so a save is a single flash write. Changing
+// this layout needs a new key; an unreadable blob is replaced by the defaults.
+struct PresetStore {
+  uint8_t n;
+  Preset p[MAX_PRESETS];
+};
+static PresetStore store;
+static Preferences presetPrefs;
+static const char *PRESET_KEY = "v1";
 
 static Job jobs[MAX_JOBS];
 static int head = 0, count = 0;
@@ -68,7 +81,7 @@ int logCount() { return logLen; }
 const String &logEntry(int i) { return logBuf[(logHead + i) % LOG_N]; }
 
 static String maskText(uint8_t mask) {
-  if (mask == 0xFF) return "All";
+  if (mask == 0xFF || mask == 0x0F) return "All";  // group frames' All / all four position bits
   String s;
   for (int g = 1; g <= 8; g++)
     if (mask & (1 << (g - 1))) s += (s.isEmpty() ? "G" : "+G") + String(g);
@@ -118,18 +131,23 @@ Result position(uint8_t mask, int pos) {
   return OK;
 }
 
+static int findPreset(const String &name) {
+  for (int i = 0; i < store.n; i++)
+    if (name.equalsIgnoreCase(store.p[i].name)) return i;
+  return -1;
+}
+
 Result preset(const String &name) {
-  for (const Preset &p : PRESETS) {
-    if (!name.equalsIgnoreCase(p.name)) continue;
-    Job *j = newJob();
-    if (!j) return FULL;
-    snprintf(j->label, sizeof(j->label), "Preset %s", p.name);
-    for (int i = 0; i < p.n; i++) addPos(j, p.steps[i].mask, p.steps[i].pos);
-    commit();
-    log("queued: %s", j->label);
-    return OK;
-  }
-  return BAD;
+  int i = findPreset(name);
+  if (i < 0) return BAD;
+  const Preset &p = store.p[i];
+  Job *j = newJob();
+  if (!j) return FULL;
+  snprintf(j->label, sizeof(j->label), "Preset %s", p.name);
+  for (int k = 0; k < p.n; k++) addPos(j, p.steps[k].mask, p.steps[k].pos);
+  commit();
+  log("queued: %s", j->label);
+  return OK;
 }
 
 int clearPending() {
@@ -199,15 +217,107 @@ uint32_t remainingMs() {
 }
 int commanded(int g) { return (g >= 1 && g <= 4) ? commandedPos[g - 1] : -1; }
 
-int presetCount() { return NPRESETS; }
-const char *presetName(int i) { return PRESETS[i].name; }
+static bool storePresets() {
+  return presetPrefs.putBytes(PRESET_KEY, &store, sizeof(store)) == sizeof(store);
+}
+
+static bool validStore() {
+  if (store.n > MAX_PRESETS) return false;
+  for (int i = 0; i < store.n; i++) {
+    const Preset &p = store.p[i];
+    if (p.n == 0 || p.n > MAX_PRESET_STEPS || !memchr(p.name, 0, sizeof(p.name))) return false;
+    for (int k = 0; k < p.n; k++)
+      if (p.steps[k].mask == 0 || p.steps[k].mask > 0x0F) return false;
+  }
+  return true;
+}
+
+void beginPresets() {
+  presetPrefs.begin("presets", false);
+  // isKey() first: avoids a NOT_FOUND log line on first boot.
+  bool loaded = presetPrefs.isKey(PRESET_KEY) && presetPrefs.getBytesLength(PRESET_KEY) == sizeof(store) &&
+                presetPrefs.getBytes(PRESET_KEY, &store, sizeof(store)) == sizeof(store) && validStore();
+  if (loaded) return;
+  memset(&store, 0, sizeof(store));
+  for (const Preset &p : DEFAULT_PRESETS) store.p[store.n++] = p;
+  if (!storePresets()) log("couldn't save the default presets to flash");
+}
+
+int presetCount() { return store.n; }
+const char *presetName(int i) { return store.p[i].name; }
+int presetSteps(int i) { return store.p[i].n; }
+uint8_t presetMask(int i, int k) { return store.p[i].steps[k].mask; }
+uint8_t presetPos(int i, int k) { return store.p[i].steps[k].pos; }
 String presetSummary(int i) {
   String s;
-  for (int k = 0; k < PRESETS[i].n; k++) {
+  for (int k = 0; k < store.p[i].n; k++) {
     if (k) s += ", ";
-    s += maskText(PRESETS[i].steps[k].mask) + " " + String(PRESETS[i].steps[k].pos);
+    s += maskText(store.p[i].steps[k].mask) + " " + String(store.p[i].steps[k].pos);
   }
   return s;
+}
+
+bool presetExists(const String &name) {
+  String n = name;
+  n.trim();
+  return findPreset(n) >= 0;
+}
+
+String savePreset(const String &rawName, uint8_t groups, bool replace) {
+  String name = rawName;
+  name.trim();
+  if (name.isEmpty() || name.length() > PRESET_NAME_MAX)
+    return "Name must be 1 to " + String(PRESET_NAME_MAX) + " characters";
+  for (char c : name)
+    if (c < 0x20 || c > 0x7E) return "Name: letters, digits, spaces and punctuation only";
+  if (groups == 0 || groups > 0x0F) return "Choose at least one group";
+  if (busy()) return "Wait for the queue to finish, so the saved positions are the ones sent";
+
+  Preset p = {};
+  strlcpy(p.name, name.c_str(), sizeof(p.name));
+  for (int g = 0; g < 4; g++) {
+    if (!(groups & (1 << g))) continue;
+    int pos = commandedPos[g];
+    if (pos < 0) return "GRP " + String(g + 1) + "'s position is unknown: set it first";
+    int k = 0;
+    while (k < p.n && p.steps[k].pos != pos) k++;
+    if (k < p.n) p.steps[k].mask |= 1 << g;  // same position: share the frame
+    else p.steps[p.n++] = {(uint8_t)(1 << g), (uint8_t)pos};
+  }
+
+  int i = findPreset(name);
+  if (i >= 0 && !replace) return "A preset called \"" + String(store.p[i].name) + "\" already exists";
+  PresetStore before = store;
+  if (i < 0) {
+    if (store.n >= MAX_PRESETS) return "No room: " + String(MAX_PRESETS) + " presets at most. Delete one first";
+    i = store.n++;
+  }
+  store.p[i] = p;
+  if (!storePresets()) {
+    store = before;
+    return "Couldn't save to flash";
+  }
+  log("saved preset %s: %s", p.name, presetSummary(i).c_str());
+  return String();
+}
+
+bool deletePreset(const String &rawName) {
+  String name = rawName;
+  name.trim();
+  int i = findPreset(name);
+  if (i < 0) return false;
+  PresetStore before = store;
+  String gone = store.p[i].name;
+  for (int k = i; k + 1 < store.n; k++) store.p[k] = store.p[k + 1];
+  store.n--;
+  memset(&store.p[store.n], 0, sizeof(Preset));
+  if (!storePresets()) {
+    store = before;
+    log("couldn't delete preset %s: flash write failed", gone.c_str());
+    return false;
+  }
+  log("deleted preset %s", gone.c_str());
+  return true;
 }
 
 }  // namespace txq

@@ -11,7 +11,7 @@
 #include "web.h"
 
 static const char *HOSTNAME = "shade-bridge";
-static const char *FW_VERSION = "0.2.0-dryrun";
+static const char *FW_VERSION = "0.3.0-dryrun";
 
 static String lineBuf;
 
@@ -29,7 +29,8 @@ static void printHelp() {
       "Shades (same queue as the web page):\n"
       "  grp <1-4|all> <up|down>\n"
       "  pos <mask> <0-255>    mask in hex, group bits 01-08, e.g. 05 = groups 1+3\n"
-      "  bedtime | waketime | sunset\n"
+      "  presets               list presets (saved and deleted on the web page)\n"
+      "  preset <name>         run a preset; a name alone works too, e.g. bedtime\n"
       "  queue                 what's sending and queued\n"
       "  clear                 drop queued jobs\n"
       "Other: help, reboot\n",
@@ -87,8 +88,14 @@ static void handleCommand(String line) {
     long mask = strtol(m.c_str(), nullptr, 16);
     if (m.isEmpty() || p.isEmpty() || (p.toInt() == 0 && p != "0")) return report(txq::BAD);
     report(txq::position((uint8_t)mask, p.toInt()));
-  } else if (cmd == "bedtime" || cmd == "waketime" || cmd == "sunset") {
-    report(txq::preset(cmd));
+  } else if (cmd == "presets") {
+    if (!txq::presetCount()) Serial.println("No presets. Save one from the web page.");
+    for (int i = 0; i < txq::presetCount(); i++)
+      Serial.printf("  %-24s %s\n", txq::presetName(i), txq::presetSummary(i).c_str());
+  } else if (cmd == "preset") {
+    rest.trim();
+    if (!txq::presetExists(rest)) Serial.println("No such preset. Type 'presets' to list them.");
+    else report(txq::preset(rest));
   } else if (cmd == "queue") {
     if (!txq::busy()) Serial.println("Idle.");
     else Serial.printf("Sending: %s (%lu ms left); %d queued; %lu ms in all\n", txq::currentLabel().c_str(),
@@ -99,6 +106,8 @@ static void handleCommand(String line) {
     Serial.println("Rebooting...");
     delay(100);
     ESP.restart();
+  } else if (txq::presetExists(line)) {
+    report(txq::preset(line));  // a preset's name on its own
   } else {
     Serial.printf("Unknown command '%s'. Type 'help'.\n", cmd.c_str());
   }
@@ -134,6 +143,7 @@ void setup() {
   Serial.begin(115200);
   delay(200);
   Serial.printf("\n\nShade bridge %s  -  type 'help'\n", FW_VERSION);
+  txq::beginPresets();
   net::begin(HOSTNAME, web::begin);
   Serial.print("> ");
 }

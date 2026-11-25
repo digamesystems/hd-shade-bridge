@@ -18,7 +18,8 @@ An experiment: a simple phone-and-tablet web UI for Hunter Douglas **Platinum Te
 | Web page and JSON API | ✅ working (tested from a PC; phone use being tried) |
 | Send queue with HD_Remote_Clone's frame timings | ✅ working, **dry run** |
 | Sending over the nRF24 radio | ⏳ not yet: frames are printed on serial instead |
-| Remote ID, pairing, editing presets from the page | ⏳ not yet |
+| Presets: run, save from the page's positions, delete; kept in flash | ✅ working, **dry run** |
+| Remote ID, pairing | ⏳ not yet |
 
 **Dry run** means every command goes through the real queue, with the real frames and timings, but the board prints each frame on the serial console instead of transmitting it. No radio needs to be attached, and no shade moves.
 
@@ -28,10 +29,9 @@ An experiment: a simple phone-and-tablet web UI for Hunter Douglas **Platinum Te
 
 The page follows the device's light or dark setting.
 
-- **One column per group (1–4).** Each shows the shade as a window with its fabric. Drag the fabric's rail, or tap where you want it, and let go to send that position. The ▲ Up and ▼ Down buttons send group commands, as the handheld's arrows do in green mode.
-- **Shade types.** In this house, groups 1 and 3 are top-down shades and groups 2 and 4 are bottom-up, so the fabric is drawn hanging from the top or rising from the bottom, with OPEN and CLOSED marked at the right ends. The types are set in `GROUP_TYPE` in [src/web.cpp](src/web.cpp).
-- **All groups:** up and down only. Positions are set per group.
-- **Presets:** bedtime, waketime and sunset, with the same steps as HD_Remote_Clone's serial commands.
+- **One column per group (GRP 1–4).** Each shows the shade as a window with its fabric, and the share of the window the fabric covers ("67%"). Drag the fabric's rail, or tap where you want it, and let go to send that position. There are no up/down arrows: a group command runs a shade all the way to a limit without the page knowing, while a drag always shows where the rail was sent.
+- **Shade types.** In this house, groups 1 and 3 are top-down shades and groups 2 and 4 are bottom-up, so the fabric is drawn hanging from the top or rising from the bottom. The types are set in `GROUP_TYPE` in [src/web.cpp](src/web.cpp).
+- **Presets:** tap one to run it. To make one, set the shades with the drag controls, open **Save current positions as a preset**, give it a name and tick the groups it should set; unticked groups are left alone when it runs. Groups saved at the same position share one frame on air. **Edit** switches to deleting: tap a preset, confirm, then **Done**. Up to 12 presets, names up to 24 characters, kept in the ESP32's flash. The first boot adds Bedtime, Waketime and Sunset, HD_Remote_Clone's presets; they can be deleted like any other.
 - **Activity:** what's sending, what's queued, a progress bar, a log, and a button to clear the queue.
 
 Positions shown are the last ones *sent*. The shades only receive, so there's no way to read where they actually are.
@@ -76,7 +76,8 @@ The ESP32 only joins **2.4 GHz** Wi-Fi.
 | `web pass [password]` | Require a login for the page (user `admin`); blank removes it |
 | `grp <1-4\|all> <up\|down>` | Group command |
 | `pos <mask> <0-255>` | Position. `mask` is hex group bits, e.g. `05` = groups 1 and 3 |
-| `bedtime`, `waketime`, `sunset` | Presets |
+| `presets` | List the presets |
+| `preset <name>` | Run a preset. A preset's name on its own also works, e.g. `bedtime` |
 | `queue` / `clear` | Show the queue / drop jobs that haven't started |
 | `help`, `reboot` | |
 
@@ -91,20 +92,22 @@ The shade commands use the same names as HD_Remote_Clone's firmware, and the web
 | `GET /` | The control page |
 | `GET /api/status` | Queue, last-sent positions, Wi-Fi details, activity log |
 | `GET /api/groups` | Shade type per group (`top-down` / `bottom-up`) |
-| `GET /api/presets` | Preset names and their steps |
-| `POST /api/grp` | `group=1..4\|all`, `dir=up\|down` |
+| `GET /api/presets` | Presets: `[{"name":…,"steps":[[mask,pos],…]},…]` |
+| `POST /api/grp` | `group=1..4\|all`, `dir=up\|down` (not used by the page) |
 | `POST /api/pos` | `group=1..4`, `pos=0..255` |
-| `POST /api/preset` | `name=<preset>` |
+| `POST /api/preset` | `name=<preset>`: run it |
+| `POST /api/preset/save` | `name=<1-24 chars>`, `groups=<1..15>` (group bits), `replace=1` to overwrite. Saves the last-sent positions; refused while the queue is busy or a ticked group's position is unknown |
+| `POST /api/preset/delete` | `name=<preset>` |
 | `POST /api/clear` | Drop queued jobs; the one sending finishes |
 
-Errors come back as `400` (bad request) or `429` (queue full) with `{"ok":false,"error":"..."}`.
+Errors come back as `400` (bad request), `404` (no such preset) or `429` (queue full) with `{"ok":false,"error":"..."}`.
 
 ## How it works
 
 ```
 src/main.cpp      serial console, setup and loop
 src/net.*         Wi-Fi client, saved settings, mDNS name
-src/txqueue.*     send queue and presets (dry run: prints frames)
+src/txqueue.*     send queue, and presets kept in flash (dry run: prints frames)
 src/web.*         HTTP routes, optional login, shade types
 src/page.h        the page: HTML, CSS and script in one string
 ```
@@ -122,7 +125,7 @@ The frame formats and timings come from HD_Remote_Clone's [RF_PROTOCOL.md](https
 
 ## Assumptions and open questions
 
-- **Position is the rail's height** on every shade: 0 at the bottom, 255 at the top. The presets agree with this, but it hasn't been checked on a top-down shade. If it's wrong, the drawing for that shade type needs flipping. This ties to open item 1 in HD_Remote_Clone's feature ideas (which rail position frames move).
+- **Position is the rail's height** on every shade: 0 at the bottom, 255 at the top. The presets agree with this, but it hasn't been checked on a top-down shade. If it's wrong, the drawing for that shade type needs flipping. This is open item 1 in HD_Remote_Clone's feature ideas (what position means on a top-down shade).
 - **No password by default.** The page is open to anyone on the network until `web pass` is set, and the login travels unencrypted over plain HTTP. That's acceptable for a dry run; it needs rethinking before the bridge moves real shades.
 - **Wi-Fi and the shade radio share 2.4 GHz.** The shades use 2433, 2452 and 2471 MHz, which overlap Wi-Fi channels 6 and 11. How well the two coexist on one board is untested.
 
@@ -130,8 +133,7 @@ The frame formats and timings come from HD_Remote_Clone's [RF_PROTOCOL.md](https
 
 1. Attach an nRF24 and send for real, reusing HD_Remote_Clone's RF code.
 2. Give the bridge its own remote ID and pair it with the groups it controls.
-3. Edit presets from the page: set the shades with the drag controls, then save.
-4. Decide what moves into HD_Remote_Clone, and how.
+3. Decide what moves into HD_Remote_Clone, and how.
 
 ## License
 

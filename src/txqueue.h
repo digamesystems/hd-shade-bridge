@@ -16,7 +16,7 @@ enum Result { OK, FULL, BAD };
 Result group(int g, bool up);
 // Absolute position, as `pos`: mask = group bits 01..08 (combinable), pos 0..255.
 Result position(uint8_t mask, int pos);
-// Named preset (bedtime, waketime, sunset).
+// Run a named preset (name matched ignoring case).
 Result preset(const String &name);
 // Drop jobs that haven't started. The running job finishes (keeps its release tail).
 int clearPending();
@@ -31,10 +31,24 @@ uint32_t currentLeftMs();
 uint32_t remainingMs();
 int commanded(int g);  // last commanded position for group 1..4, -1 if unknown
 
-// Presets, for listing.
+// Presets, kept in flash. The first boot seeds bedtime, waketime and sunset
+// (HD_Remote_Clone's); after that they're ordinary presets, and can be deleted.
+static const int MAX_PRESETS = 12;
+static const int PRESET_NAME_MAX = 24;
+void beginPresets();  // load from flash; call once from setup()
 int presetCount();
 const char *presetName(int i);
-String presetSummary(int i);
+int presetSteps(int i);
+uint8_t presetMask(int i, int k);
+uint8_t presetPos(int i, int k);
+String presetSummary(int i);  // e.g. "G4 255, G2 255"
+// Save the last-sent positions of `groups` (bits 01..08) as preset `name`.
+// Groups at the same position share one step (one frame on air). Refused
+// while the queue is busy, so the saved positions are the ones sent. Returns
+// "" on success, else a message for the user.
+String savePreset(const String &name, uint8_t groups, bool replace);
+bool presetExists(const String &name);
+bool deletePreset(const String &name);
 
 // Activity log (oldest first), also echoed to Serial.
 void log(const char *fmt, ...);

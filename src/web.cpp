@@ -69,14 +69,39 @@ static void handleStatus() {
   server.send(200, "application/json", j);
 }
 
+static void fail(int code, const String &msg) {
+  server.send(code, "application/json", "{\"ok\":false,\"error\":\"" + esc(msg) + "\"}");
+}
+
+// [{"name":"Bedtime","steps":[[mask,pos],...]}, ...]; the page shows positions as %.
 static void handlePresets() {
   if (!authed()) return;
   String j = "[";
   for (int i = 0; i < txq::presetCount(); i++) {
-    if (i) j += ",";
-    j += "{\"name\":\"" + String(txq::presetName(i)) + "\",\"steps\":\"" + esc(txq::presetSummary(i)) + "\"}";
+    j += String(i ? "," : "") + "{\"name\":\"" + esc(txq::presetName(i)) + "\",\"steps\":[";
+    for (int k = 0; k < txq::presetSteps(i); k++)
+      j += String(k ? "," : "") + "[" + String(txq::presetMask(i, k)) + "," + String(txq::presetPos(i, k)) + "]";
+    j += "]}";
   }
   server.send(200, "application/json", j + "]");
+}
+
+static void handlePresetSave() {
+  if (!authed()) return;
+  String g = server.arg("groups");  // group bits, decimal 1..15
+  bool digits = g.length() >= 1 && g.length() <= 2;
+  for (char c : g) digits = digits && isDigit(c);
+  int mask = digits ? g.toInt() : 0;
+  if (mask < 1 || mask > 15) return fail(400, "Choose at least one group");
+  String err = txq::savePreset(server.arg("name"), mask, server.arg("replace") == "1");
+  if (!err.isEmpty()) return fail(400, err);
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
+static void handlePresetDelete() {
+  if (!authed()) return;
+  if (!txq::deletePreset(server.arg("name"))) return fail(404, "No such preset, or the flash write failed");
+  server.send(200, "application/json", "{\"ok\":true}");
 }
 
 static void handleGrp() {
@@ -117,6 +142,8 @@ void begin() {
     if (!authed()) return;
     reply(txq::preset(server.arg("name")));
   });
+  server.on("/api/preset/save", HTTP_POST, handlePresetSave);
+  server.on("/api/preset/delete", HTTP_POST, handlePresetDelete);
   server.on("/api/clear", HTTP_POST, [] {
     if (!authed()) return;
     int n = txq::clearPending();
