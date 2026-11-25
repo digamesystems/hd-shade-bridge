@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Shade bridge prototype (dry run): Wi-Fi setup over serial, a web page for
 // group commands, positions and presets, and a non-blocking send queue.
 // Frames are printed instead of transmitted until an nRF24 is attached.

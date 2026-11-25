@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Send queue for shade commands (dry run: frames are printed, not transmitted).
 //
 // Web and serial requests enqueue jobs and return at once; poll() steps

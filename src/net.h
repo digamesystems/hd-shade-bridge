@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Wi-Fi client setup: credentials in NVS, set from the serial console.
 #pragma once
 #include <Arduino.h>

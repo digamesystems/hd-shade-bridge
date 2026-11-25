@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Bridge web page and JSON API.
 //
 //   GET  /              control page

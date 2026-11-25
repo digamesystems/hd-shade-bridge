@@ -128,3 +128,11 @@ The frame formats and timings come from HD_Remote_Clone's [RF_PROTOCOL.md](https
 2. Give the bridge its own remote ID and pair it with the groups it controls.
 3. Edit presets from the page: set the shades with the drag controls, then save.
 4. Decide what moves into HD_Remote_Clone, and how.
+
+## License
+
+Copyright © 2026 John Price.
+
+Licensed under the GNU General Public License, version 2 or (at your option) any later version (`GPL-2.0-or-later`), the same as HD_Remote_Clone's firmware, so code can move between the two projects. See [LICENSE](LICENSE). Source files carry an `SPDX-License-Identifier` line.
+
+Protocol facts (frame formats and timings) come from HD_Remote_Clone's documentation, which credits [spitcool/hd-platinum-rf](https://github.com/spitcool/hd-platinum-rf) for the original RF research.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Bridge control page, served at /. Talks to the JSON API in web.cpp.
 #pragma once
 #include <Arduino.h>
