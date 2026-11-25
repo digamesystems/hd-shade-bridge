@@ -24,6 +24,10 @@ An experiment: a simple phone-and-tablet web UI for Hunter Douglas **Platinum Te
 
 ## The page
 
+<img src="docs/screenshot-dark.png" width="560" alt="Shade bridge page in dark theme: four group columns, each with Up and Down buttons and a window graphic whose fabric is dragged to set the position; groups 1 and 3 drawn top-down, groups 2 and 4 bottom-up; an All groups row below">
+
+The page follows the device's light or dark setting.
+
 - **One column per group (1–4).** Each shows the shade as a window with its fabric. Drag the fabric's rail, or tap where you want it, and let go to send that position. The ▲ Up and ▼ Down buttons send group commands, as the handheld's arrows do in green mode.
 - **Shade types.** In this house, groups 1 and 3 are top-down shades and groups 2 and 4 are bottom-up, so the fabric is drawn hanging from the top or rising from the bottom, with OPEN and CLOSED marked at the right ends. The types are set in `GROUP_TYPE` in [src/web.cpp](src/web.cpp).
 - **All groups:** up and down only. Positions are set per group.
