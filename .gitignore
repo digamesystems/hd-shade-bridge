@@ -1,0 +1,8 @@
+# PlatformIO build output
+.pio/
+
+# Editor settings PlatformIO generates
+.vscode/
+
+# Flash backups (the original AT firmware, 4 MB) stay out of the repo
+backup-*.bin
