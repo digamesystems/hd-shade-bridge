@@ -25,7 +25,7 @@ The bridge transmits when it finds an nRF24 and a remote ID that HD_Remote_Clone
 
 ## The page
 
-<img src="docs/screenshot-dark.png" width="560" alt="Shade bridge page in dark theme: four group columns, each with Up and Down buttons and a window graphic whose fabric is dragged to set the position; groups 1 and 3 drawn top-down, groups 2 and 4 bottom-up; an All groups row below">
+<img src="docs/screenshot-dark.png" width="560" alt="Shade bridge page in dark theme: four group columns, GRP 1 to GRP 4, each a window graphic with its percentage closed; the fabric is dragged to set the position; groups 1 and 3 drawn top-down, groups 2 and 4 bottom-up. Below: preset buttons (Bedtime, Waketime, Sunset, Afternoon Sun) with an Edit button, a Save current positions as a preset panel, the Activity card with its log, and a footer showing the firmware version and radio state">
 
 The page follows the device's light or dark setting.
 
