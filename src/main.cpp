@@ -1,23 +1,25 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Shade bridge prototype (dry run): Wi-Fi setup over serial, a web page for
-// group commands, positions and presets, and a non-blocking send queue.
-// Frames are printed instead of transmitted until an nRF24 is attached.
+// Shade bridge prototype: Wi-Fi setup over serial, a web page for positions
+// and presets, and a non-blocking send queue. Frames go out on an nRF24 when
+// one is fitted and HD_Remote_Clone has stored a remote ID on the board;
+// otherwise they're printed instead (dry run).
 //
 // Serial console, 115200 baud. Type 'help'.
 
 #include <Arduino.h>
 #include "net.h"
+#include "radio.h"
 #include "txqueue.h"
+#include "version.h"
 #include "web.h"
 
 static const char *HOSTNAME = "shade-bridge";
-static const char *FW_VERSION = "0.3.0-dryrun";
 
 static String lineBuf;
 
 static void printHelp() {
   Serial.printf(
-      "Shade bridge %s (dry run: frames are printed, not sent)\n"
+      "Shade bridge %s (radio: %s)\n"
       "Wi-Fi:\n"
       "  wifi scan             list nearby networks\n"
       "  wifi ssid <name>      set network name\n"
@@ -33,8 +35,10 @@ static void printHelp() {
       "  preset <name>         run a preset; a name alone works too, e.g. bedtime\n"
       "  queue                 what's sending and queued\n"
       "  clear                 drop queued jobs\n"
+      "Radio:\n"
+      "  radio [on|off]        show the radio, or turn transmitting on/off (off = dry run)\n"
       "Other: help, reboot\n",
-      FW_VERSION);
+      FW_VERSION, radio::state());
 }
 
 static void report(txq::Result r) {
@@ -98,10 +102,19 @@ static void handleCommand(String line) {
     else report(txq::preset(rest));
   } else if (cmd == "queue") {
     if (!txq::busy()) Serial.println("Idle.");
-    else Serial.printf("Sending: %s (%lu ms left); %d queued; %lu ms in all\n", txq::currentLabel().c_str(),
-                       (unsigned long)txq::currentLeftMs(), txq::pending(), (unsigned long)txq::remainingMs());
+    else {
+      Serial.printf("Sending: %s (%lu ms left); %d queued; %lu ms in all\n", txq::currentLabel().c_str(),
+                    (unsigned long)txq::currentLeftMs(), txq::pending(), (unsigned long)txq::remainingMs());
+      for (int i = 0; i < txq::pending(); i++) Serial.printf("  %d. %s\n", i + 1, txq::pendingLabel(i).c_str());
+    }
   } else if (cmd == "clear") {
     Serial.printf("Dropped %d queued job(s).\n", txq::clearPending());
+  } else if (cmd == "radio") {
+    String sub = nextWord(rest);
+    sub.toLowerCase();
+    if (sub == "on" || sub == "off") radio::setEnabled(sub == "on");
+    else if (!sub.isEmpty()) return report(txq::BAD);
+    Serial.printf("Radio: %s\n", radio::state());
   } else if (cmd == "reboot") {
     Serial.println("Rebooting...");
     delay(100);
@@ -144,6 +157,7 @@ void setup() {
   delay(200);
   Serial.printf("\n\nShade bridge %s  -  type 'help'\n", FW_VERSION);
   txq::beginPresets();
+  radio::begin();
   net::begin(HOSTNAME, web::begin);
   Serial.print("> ");
 }

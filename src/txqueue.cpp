@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "txqueue.h"
 #include <Preferences.h>
+#include "radio.h"
 #include <stdarg.h>
 
 namespace txq {
@@ -15,12 +16,18 @@ struct Step {
   uint8_t mode, group, action;
   uint16_t ms;
 };
-static const int MAX_STEPS = 8;
-static const int MAX_JOBS = 8;
+// A job is one command: a group command (held frames, then the release tail)
+// or a position (50 frames, then 32). Positions also keep their mask and
+// target, so waiting ones can be merged (see enqueuePos).
+static const int MAX_STEPS = 2;
+static const int MAX_JOBS = 16;
 struct Job {
-  char label[40];
+  char label[48];
+  char src[PRESET_NAME_MAX + 1];  // preset it came from; "" if none, or merged with others
   Step steps[MAX_STEPS];
   uint8_t n;
+  bool isPos;
+  uint8_t mask, pos;
 };
 
 struct PosStep {
@@ -57,7 +64,7 @@ static int stepIdx = -1;  // -1: head job not started
 static uint32_t stepStart = 0;
 static int commandedPos[4] = {-1, -1, -1, -1};
 
-static const int LOG_N = 16;
+static const int LOG_N = 24;
 static String logBuf[LOG_N];
 static int logHead = 0, logLen = 0;
 
@@ -88,16 +95,40 @@ static String maskText(uint8_t mask) {
   return s;
 }
 
+// k-th job in the queue; 0 is the head (the one sending, once started).
+static Job &jobAt(int k) { return jobs[(head + k) % MAX_JOBS]; }
+
 static Job *newJob() {
   if (count >= MAX_JOBS) return nullptr;
-  Job *j = &jobs[(head + count) % MAX_JOBS];
+  Job *j = &jobAt(count);
   j->n = 0;
+  j->isPos = false;
+  j->mask = j->pos = 0;
+  j->src[0] = 0;
   return j;
 }
 static void add(Job *j, uint8_t mode, uint8_t grp, uint8_t action, uint16_t ms) {
   if (j->n < MAX_STEPS) j->steps[j->n++] = {mode, grp, action, ms};
 }
 static void commit() { count++; }
+
+// (Re)builds a position job's frames and label from mask and pos.
+static void setPos(Job &j, uint8_t mask, uint8_t pos) {
+  j.isPos = true;
+  j.mask = mask;
+  j.pos = pos;
+  j.n = 0;
+  add(&j, 0x50, mask, pos, POS50_MS);
+  add(&j, 0x32, mask, pos, POS32_MS);
+  snprintf(j.label, sizeof(j.label), "%s%s%s to %u", j.src, j.src[0] ? ": " : "", maskText(mask).c_str(),
+           (unsigned)pos);
+}
+
+// Removes a waiting job, keeping the order of the rest.
+static void removeAt(int k) {
+  for (int i = k; i + 1 < count; i++) jobAt(i) = jobAt(i + 1);
+  count--;
+}
 
 Result group(int g, bool up) {
   if (g < 0 || g > 4) return BAD;
@@ -113,22 +144,74 @@ Result group(int g, bool up) {
   return OK;
 }
 
-static bool addPos(Job *j, uint8_t mask, int pos) {
-  if (mask == 0 || mask > 0x0F || pos < 0 || pos > 255) return false;
-  add(j, 0x50, mask, pos, POS50_MS);
-  add(j, 0x32, mask, pos, POS32_MS);
-  return true;
+// Queues a position, merged with the positions already waiting
+// (docs/FEATURE_EXPLORATION.md, "Combine commands to save air time"):
+//  1. The new groups are taken out of waiting jobs with another target:
+//     positions are absolute, so only a group's latest target matters. A job
+//     left with no groups is dropped.
+//  2. If a waiting job has the same target, the groups join it: one frame.
+//  3. Otherwise it's a new job at the end.
+// Only waiting jobs after the last waiting group command are touched, so a
+// position never moves past an up/down for the same shade. The job being sent
+// is never changed. src: the preset it comes from, or nullptr.
+static Result enqueuePos(uint8_t mask, uint8_t pos, const char *src) {
+  if (!src) src = "";
+  int first = stepIdx >= 0 ? 1 : 0;  // skip the job being sent
+  int lo = first;
+  for (int k = count - 1; k >= first; k--)
+    if (!jobAt(k).isPos) {
+      lo = k + 1;
+      break;
+    }
+
+  // Room check before changing anything: a new job is needed unless one joins,
+  // and step 1 may free slots.
+  int join = -1, emptied = 0;
+  for (int k = lo; k < count; k++) {
+    const Job &j = jobAt(k);
+    if (j.pos == pos) join = k;
+    else if ((j.mask & mask) && !(j.mask & ~mask)) emptied++;
+  }
+  if (join < 0 && count - emptied >= MAX_JOBS) return FULL;
+
+  // 1. Take the groups out of jobs with another target.
+  for (int k = lo; k < count; k++) {
+    Job &j = jobAt(k);
+    if (j.pos == pos || !(j.mask & mask)) continue;
+    String before = j.label;
+    uint8_t left = j.mask & ~mask;
+    if (!left) {
+      log("replaced: %s", before.c_str());
+      removeAt(k);
+      if (join > k) join--;
+      k--;
+    } else {
+      setPos(j, left, j.pos);
+      log("trimmed: %s, now %s", before.c_str(), j.label);
+    }
+  }
+
+  // 2. Join a job with the same target.
+  if (join >= 0) {
+    Job &j = jobAt(join);
+    if (strcmp(j.src, src) != 0) j.src[0] = 0;  // from different sources: no name
+    setPos(j, j.mask | mask, pos);
+    log("merged: %s to %u, now %s", maskText(mask).c_str(), (unsigned)pos, j.label);
+    return OK;
+  }
+
+  // 3. New job.
+  Job *j = newJob();  // room checked above
+  strlcpy(j->src, src, sizeof(j->src));
+  setPos(*j, mask, pos);
+  commit();
+  log("queued: %s", j->label);
+  return OK;
 }
 
 Result position(uint8_t mask, int pos) {
   if (mask == 0 || mask > 0x0F || pos < 0 || pos > 255) return BAD;
-  Job *j = newJob();
-  if (!j) return FULL;
-  snprintf(j->label, sizeof(j->label), "%s to %d", maskText(mask).c_str(), pos);
-  addPos(j, mask, pos);
-  commit();
-  log("queued: %s", j->label);
-  return OK;
+  return enqueuePos(mask, pos, nullptr);
 }
 
 static int findPreset(const String &name) {
@@ -141,13 +224,16 @@ Result preset(const String &name) {
   int i = findPreset(name);
   if (i < 0) return BAD;
   const Preset &p = store.p[i];
-  Job *j = newJob();
-  if (!j) return FULL;
-  snprintf(j->label, sizeof(j->label), "Preset %s", p.name);
-  for (int k = 0; k < p.n; k++) addPos(j, p.steps[k].mask, p.steps[k].pos);
-  commit();
-  log("queued: %s", j->label);
+  // Each step needs at most one new job, so this much room means none of them fails.
+  if (MAX_JOBS - count < p.n) return FULL;
+  log("preset: %s", p.name);
+  for (int k = 0; k < p.n; k++) enqueuePos(p.steps[k].mask, p.steps[k].pos, p.name);
   return OK;
+}
+
+String pendingLabel(int i) {
+  int first = (stepIdx >= 0 && count > 0) ? 1 : 0;
+  return (i >= 0 && first + i < count) ? String(jobAt(first + i).label) : String();
 }
 
 int clearPending() {
@@ -167,14 +253,40 @@ static void startStep(const Step &s) {
     if (s.mode == 0x50) commandedPos[i] = s.action;    // position frame
     else if (s.mode == 0x20) commandedPos[i] = -1;     // arrow: end point unknown
   }
-  // Dry run: show the frame the nRF24 would repeat on ch 33/52/71.
-  Serial.printf("\r[dry-run] ID ID %02X %02X %02X  for %u ms on ch 33/52/71\n", s.mode, s.group,
-                s.action, s.ms);
+  // The ID is never printed: it's private (HD_Remote_Clone CLAUDE.md).
+  Serial.printf("\r[%s] ID ID %02X %02X %02X  for %u ms on ch 33/52/71\n", radio::live() ? "rf" : "dry-run",
+                s.mode, s.group, s.action, s.ms);
+}
+
+static void finishJob(const Job &j) {
+  log("done: %s", j.label);
+  head = (head + 1) % MAX_JOBS;
+  count--;
+  stepIdx = -1;
 }
 
 void poll() {
   if (count == 0) return;
   Job &j = jobs[head];
+
+  // Live: the whole command at once, as HD_Remote_Clone's sendGroup() /
+  // sendPosition() do (CLAUDE.md, "RF protocol"): radio set up, then every
+  // phase back to back. loop() waits meanwhile, up to about 1.8 s.
+  if (stepIdx < 0 && radio::live()) {
+    log("sending: %s", j.label);
+    radio::prepare();
+    for (stepIdx = 0; stepIdx < j.n; stepIdx++) {
+      const Step &s = j.steps[stepIdx];
+      startStep(s);
+      uint32_t n = radio::sendPhase(s.mode, s.group, s.action, s.ms);
+      Serial.printf("\r[rf]   %lu packets\n", (unsigned long)n);
+    }
+    finishJob(j);
+    return;
+  }
+
+  // Dry run: nothing goes on air, so the steps are only timed, without
+  // holding up loop().
   if (stepIdx < 0) {
     stepIdx = 0;
     log("sending: %s", j.label);
@@ -186,10 +298,7 @@ void poll() {
     startStep(j.steps[stepIdx]);
     return;
   }
-  log("done: %s", j.label);
-  head = (head + 1) % MAX_JOBS;
-  count--;
-  stepIdx = -1;
+  finishJob(j);
 }
 
 bool busy() { return count > 0; }

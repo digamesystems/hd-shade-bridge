@@ -76,10 +76,11 @@ border:1px solid var(--line);border-radius:8px;padding:9px 10px}
 #now{font-weight:600}
 ol{list-style:none;margin:10px 0 0;padding:10px 0 0;border-top:1px solid var(--line);
 font:12px/1.55 ui-monospace,Consolas,monospace;color:var(--mute);max-height:230px;overflow:auto}
+footer{margin-top:18px;text-align:center;font-size:11px;color:var(--mute);font-variant-numeric:tabular-nums}
 </style></head><body><main>
 <header><h1>Shade bridge</h1><span class="net" id="net">connecting…</span></header>
-<div class="banner" id="dry">Dry run: no radio is attached. Commands go through the real send queue and the
-frames are printed on the serial console instead of transmitted.</div>
+<div class="banner" id="dry">Dry run (<span id="why">no radio</span>): commands go through the real send
+queue and the frames are printed on the serial console instead of transmitted.</div>
 
 <h2>Groups</h2>
 <div class="cols" id="groups"></div>
@@ -107,9 +108,11 @@ preset runs.</p>
 <div class="row"><span id="now" style="flex:1">Idle</span><button class="ghost" id="clear">Clear queue</button></div>
 <div class="bar"><i id="bar"></i></div>
 <div class="val" id="qinfo">&nbsp;</div>
+<div class="val" id="waiting" style="white-space:pre-line"></div>
 <div class="err" id="msg"></div>
 <ol id="log"></ol>
 </div>
+<footer id="ver"></footer>
 </main>
 <script>
 const $=s=>document.querySelector(s);
@@ -237,6 +240,8 @@ async function refresh(){
   try{s=await (await fetch('/api/status')).json();}catch(e){$('#net').textContent='bridge not responding';return;}
   $('#net').textContent=s.wifi.ssid+' · '+s.wifi.rssi+' dBm · ch '+s.wifi.ch+' · '+s.wifi.ip;
   $('#dry').hidden=!s.dry_run;
+  $('#ver').textContent='Shade bridge '+s.version+' · radio '+s.radio;
+  $('#why').textContent=s.radio==='off'?'transmit turned off on serial':(s.radio||'no radio');
   s.pos.forEach((p,i)=>{
     const g=i+1, w=$('#w'+g);
     if(!w||w.classList.contains('drag')||Date.now()-(touched[g]||0)<3000) return;  // don't fight the user's finger
@@ -246,6 +251,7 @@ async function refresh(){
   $('#now').textContent=s.current?'Sending: '+s.current:'Idle';
   $('#bar').style.width=s.cur_total_ms?(100*(1-s.cur_left_ms/s.cur_total_ms))+'%':'0';
   $('#qinfo').textContent=s.busy?(s.queued+' queued · '+secs(s.remaining_ms)+' to go'):' ';
+  $('#waiting').textContent=(s.waiting||[]).map((l,i)=>(i+1)+'. '+l).join('\n');
   $('#log').innerHTML=s.log.slice().reverse().map(l=>'<li>'+l.replace(/</g,'&lt;')+'</li>').join('');
 }
 setInterval(()=>{if(!document.hidden)refresh();},1000);

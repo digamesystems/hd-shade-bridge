@@ -24,7 +24,7 @@ One frame carries one position, so only commands with the same target can share 
 | Overlap | G1+G2 to 100 waiting, then G2 to 200 | G1 to 100, and G2 to 200 |
 | Different groups, different positions | G1 to 100, G3 to 50 | no saving: two frames |
 
-**Proposed (Claude), for discussion:**
+**Proposed (Claude), for discussion** (built 2026-11-25; see below):
 
 - **Merge when a command is queued**, only into jobs that are still waiting. The job being sent is never changed.
 - **The rule, for a new target (mask, pos):**
@@ -38,7 +38,12 @@ One frame carries one position, so only commands with the same target can share 
 - **Log what was merged**, e.g. "queued: G2 to 255 (joined G4 to 255)", so the activity log still explains what went out on air.
 - **The page's progress bar and time estimate** need no change: they read the queue.
 
-**Done so far (2026-11-25):** presets saved from the page store groups at the same position as one step, so they share a frame. Merging in the queue isn't built yet, and the three seeded presets are kept as HD_Remote_Clone defines them.
+**Built (2026-11-25, fw 0.4.0-dryrun):**
+
+- The queue merges positions as above (`enqueuePos` in [src/txqueue.cpp](../src/txqueue.cpp)). One addition: only waiting positions after the last waiting group (up/down) command are touched, so a position never moves past an up/down for the same shade. The page doesn't send group commands, but the serial `grp` does.
+- Presets are queued one position per job, so they merge too. A job keeps the preset's name in its label ("Bedtime: G2+G4 to 255") unless it merges with a command from elsewhere.
+- The log says what happened: `queued`, `merged … now …`, `trimmed … now …`, `replaced`. The page's Activity card and the serial `queue` command list the waiting jobs.
+- Presets saved from the page already store groups at the same position as one step. The three seeded presets are kept as HD_Remote_Clone defines them; queue merging now gives `Bedtime` its one-frame saving anyway.
 
 **Open:**
 

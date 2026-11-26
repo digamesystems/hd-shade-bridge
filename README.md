@@ -16,12 +16,12 @@ An experiment: a simple phone-and-tablet web UI for Hunter Douglas **Platinum Te
 |---|---|
 | Wi-Fi setup over the serial console, credentials kept in the ESP32's flash | ✅ working |
 | Web page and JSON API | ✅ working (tested from a PC; phone use being tried) |
-| Send queue with HD_Remote_Clone's frame timings | ✅ working, **dry run** |
-| Sending over the nRF24 radio | ⏳ not yet: frames are printed on serial instead |
-| Presets: run, save from the page's positions, delete; kept in flash | ✅ working, **dry run** |
-| Remote ID, pairing | ⏳ not yet |
+| Send queue with HD_Remote_Clone's frame timings, merging waiting positions | ✅ working |
+| Sending over an nRF24, exactly as HD_Remote_Clone does | ✅ transmitting on HD_Remote_Clone's handheld (2026-11-26); shades' response being tried |
+| Presets: run, save from the page's positions, delete; kept in flash | ✅ working |
+| Remote ID | Borrowed from HD_Remote_Clone's flash on the same board; no ID of its own yet |
 
-**Dry run** means every command goes through the real queue, with the real frames and timings, but the board prints each frame on the serial console instead of transmitting it. No radio needs to be attached, and no shade moves.
+The bridge transmits when it finds an nRF24 and a remote ID that HD_Remote_Clone's firmware stored on the board. Otherwise, or after `radio off` on serial, it runs as a **dry run**: every command goes through the real queue, with the real frames and timings, but each frame is printed on the serial console instead of transmitted, and no shade moves. The page shows a banner in dry run, and its footer shows the firmware version and radio state.
 
 ## The page
 
@@ -40,7 +40,7 @@ Positions shown are the last ones *sent*. The shades only receive, so there's no
 
 Any ESP32 dev board with Wi-Fi works for the dry run. This one is developed on an ESP32-DevKitC-style board (ESP32-D0WDQ6, 4 MB flash, CP2102 USB-serial) using PlatformIO's `esp32dev` profile.
 
-To send for real, it will need an nRF24L01+ module wired as on HD_Remote_Clone's breadboard; see that project's [WIRING.md](https://github.com/digamesystems/HD_Remote_Clone/blob/main/docs/WIRING.md) and [pin map](https://github.com/digamesystems/HD_Remote_Clone/blob/main/docs/FIRMWARE.md#pin-map).
+To send for real, it needs an nRF24L01+ on VSPI with CE on GPIO 17 and CSN on GPIO 5, as on HD_Remote_Clone's breadboard and handheld PCB (see that project's [WIRING.md](https://github.com/digamesystems/HD_Remote_Clone/blob/main/docs/WIRING.md) and [pin map](https://github.com/digamesystems/HD_Remote_Clone/blob/main/docs/FIRMWARE.md#pin-map)), and a remote ID paired with the shades. For now the bridge borrows the ID that HD_Remote_Clone's firmware keeps in the board's flash (read only; never printed or served), so the easy way to try it is to flash it onto one of HD_Remote_Clone's boards: `pio run -t upload --upload-port COMx`. HD_Remote_Clone's own firmware goes back on with its `pio run -e handheld -t upload`, and its saved settings are untouched. GPIO 4, the IR LED driver on those boards, is held low.
 
 ## Quick start
 
@@ -79,6 +79,7 @@ The ESP32 only joins **2.4 GHz** Wi-Fi.
 | `presets` | List the presets |
 | `preset <name>` | Run a preset. A preset's name on its own also works, e.g. `bedtime` |
 | `queue` / `clear` | Show the queue / drop jobs that haven't started |
+| `radio [on\|off]` | Show the radio state, or turn transmitting off (dry run) and on again; on at boot |
 | `help`, `reboot` | |
 
 The shade commands use the same names as HD_Remote_Clone's firmware, and the web page and serial console share one queue.
@@ -90,7 +91,7 @@ The shade commands use the same names as HD_Remote_Clone's firmware, and the web
 | Endpoint | Purpose |
 |---|---|
 | `GET /` | The control page |
-| `GET /api/status` | Queue, last-sent positions, Wi-Fi details, activity log |
+| `GET /api/status` | Firmware version, radio state (`live`, `off`, `no radio`, `no remote ID`), queue (with the waiting jobs' labels), last-sent positions, Wi-Fi details, activity log |
 | `GET /api/groups` | Shade type per group (`top-down` / `bottom-up`) |
 | `GET /api/presets` | Presets: `[{"name":…,"steps":[[mask,pos],…]},…]` |
 | `POST /api/grp` | `group=1..4\|all`, `dir=up\|down` (not used by the page) |
@@ -107,12 +108,16 @@ Errors come back as `400` (bad request), `404` (no such preset) or `429` (queue 
 ```
 src/main.cpp      serial console, setup and loop
 src/net.*         Wi-Fi client, saved settings, mDNS name
-src/txqueue.*     send queue, and presets kept in flash (dry run: prints frames)
+src/radio.*       nRF24 transmitter, as HD_Remote_Clone's rf_tools.cpp
+src/txqueue.*     send queue, merging, and presets kept in flash
+src/version.h     firmware version
 src/web.*         HTTP routes, optional login, shade types
 src/page.h        the page: HTML, CSS and script in one string
 ```
 
-Sending a position takes about 1.8 s on air, and a preset several seconds. The web server and the console run in the same loop, so nothing is sent from inside a request: requests add a job to the queue and return, and the queue steps through each job's frames between loop passes. That keeps the page and console responsive while commands play out.
+Sending a position takes about 1.8 s on air, and a preset several seconds. The web server and the console run in the same loop, so nothing is sent from inside a request: requests add a job to the queue and return, and the loop sends queued commands one at a time. Each command goes on air exactly as HD_Remote_Clone's `sendGroup()` / `sendPosition()` send it: radio set up, then every phase back to back on ch 33/52/71, each phase starting on 33. The loop waits while a command is on air (up to about 1.8 s), so the page and console pause for that long; between commands, and between a preset's steps, they respond. In dry run nothing waits.
+
+Waiting positions are merged to save air time: groups headed for the same position share one frame, and a newer target for a group replaces one that hasn't been sent. The job being sent is never changed, and nothing merges across a waiting up/down command. Details in [docs/FEATURE_EXPLORATION.md](docs/FEATURE_EXPLORATION.md).
 
 The frame formats and timings come from HD_Remote_Clone's [RF_PROTOCOL.md](https://github.com/digamesystems/HD_Remote_Clone/blob/main/docs/RF_PROTOCOL.md) and [FIRMWARE.md](https://github.com/digamesystems/HD_Remote_Clone/blob/main/docs/FIRMWARE.md):
 
@@ -126,12 +131,12 @@ The frame formats and timings come from HD_Remote_Clone's [RF_PROTOCOL.md](https
 ## Assumptions and open questions
 
 - **Position is the rail's height** on every shade: 0 at the bottom, 255 at the top. The presets agree with this, but it hasn't been checked on a top-down shade. If it's wrong, the drawing for that shade type needs flipping. This is open item 1 in HD_Remote_Clone's feature ideas (what position means on a top-down shade).
-- **No password by default.** The page is open to anyone on the network until `web pass` is set, and the login travels unencrypted over plain HTTP. That's acceptable for a dry run; it needs rethinking before the bridge moves real shades.
-- **Wi-Fi and the shade radio share 2.4 GHz.** The shades use 2433, 2452 and 2471 MHz, which overlap Wi-Fi channels 6 and 11. How well the two coexist on one board is untested.
+- **No password by default.** The page is open to anyone on the network until `web pass` is set, and the login travels unencrypted over plain HTTP. That was acceptable for a dry run; now that the bridge can move real shades, it needs rethinking.
+- **Wi-Fi and the shade radio share 2.4 GHz.** The shades use 2433, 2452 and 2471 MHz, which overlap Wi-Fi channels 6 and 11. How well the two coexist on one board is being tried (first test 2026-11-26, Wi-Fi on channel 11).
 
 ## Next steps
 
-1. Attach an nRF24 and send for real, reusing HD_Remote_Clone's RF code.
+1. Confirm the shades respond to the bridge, and that Wi-Fi and the shade radio coexist.
 2. Give the bridge its own remote ID and pair it with the groups it controls.
 3. Decide what moves into HD_Remote_Clone, and how.
 

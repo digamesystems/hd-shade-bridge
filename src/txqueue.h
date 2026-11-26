@@ -15,8 +15,11 @@ enum Result { OK, FULL, BAD };
 // Group command, as `grp` in HD_Remote_Clone: g = 1..4, or 0 for All.
 Result group(int g, bool up);
 // Absolute position, as `pos`: mask = group bits 01..08 (combinable), pos 0..255.
+// Merged with waiting positions where it can be: groups going to the same
+// position share a frame, and a newer target replaces an older one.
 Result position(uint8_t mask, int pos);
-// Run a named preset (name matched ignoring case).
+// Run a named preset (name matched ignoring case). Its steps are queued as
+// positions, so they merge too.
 Result preset(const String &name);
 // Drop jobs that haven't started. The running job finishes (keeps its release tail).
 int clearPending();
@@ -25,6 +28,7 @@ void poll();
 // Status for the web page and console.
 bool busy();
 int pending();
+String pendingLabel(int i);  // i-th waiting job, 0 = next to send
 String currentLabel();
 uint32_t currentTotalMs();
 uint32_t currentLeftMs();

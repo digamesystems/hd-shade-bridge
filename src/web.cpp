@@ -4,6 +4,8 @@
 #include <WiFi.h>
 #include "net.h"
 #include "page.h"
+#include "radio.h"
+#include "version.h"
 #include "txqueue.h"
 
 namespace web {
@@ -52,7 +54,8 @@ static int parseGroup(const String &g) {  // 1..4, 0 = all, -1 = bad
 
 static void handleStatus() {
   if (!authed()) return;
-  String j = "{\"dry_run\":true,\"uptime\":" + String(millis() / 1000);
+  String j = "{\"version\":\"" FW_VERSION "\",\"dry_run\":" + String(radio::live() ? "false" : "true") + ",\"radio\":\"" +
+             radio::state() + "\",\"uptime\":" + String(millis() / 1000);
   j += ",\"wifi\":{\"ssid\":\"" + esc(WiFi.SSID()) + "\",\"rssi\":" + String(WiFi.RSSI()) +
        ",\"ch\":" + String(WiFi.channel()) + ",\"ip\":\"" + WiFi.localIP().toString() + "\"}";
   j += ",\"busy\":" + String(txq::busy() ? "true" : "false");
@@ -60,6 +63,9 @@ static void handleStatus() {
   j += ",\"cur_total_ms\":" + String(txq::currentTotalMs());
   j += ",\"cur_left_ms\":" + String(txq::currentLeftMs());
   j += ",\"queued\":" + String(txq::pending());
+  j += ",\"waiting\":[";
+  for (int i = 0; i < txq::pending(); i++) j += (i ? ",\"" : "\"") + esc(txq::pendingLabel(i)) + "\"";
+  j += "]";
   j += ",\"remaining_ms\":" + String(txq::remainingMs());
   j += ",\"pos\":[";
   for (int g = 1; g <= 4; g++) j += (g > 1 ? "," : "") + String(txq::commanded(g));
