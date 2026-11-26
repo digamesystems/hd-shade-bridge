@@ -17,7 +17,7 @@ An experiment: a simple phone-and-tablet web UI for Hunter Douglas **Platinum Te
 | Wi-Fi setup over the serial console, credentials kept in the ESP32's flash | ✅ working |
 | Web page and JSON API | ✅ working (tested from a PC; phone use being tried) |
 | Send queue with HD_Remote_Clone's frame timings, merging waiting positions | ✅ working |
-| Sending over an nRF24, exactly as HD_Remote_Clone does | ✅ transmitting on HD_Remote_Clone's handheld (2026-11-26); shades' response being tried |
+| Sending over an nRF24, exactly as HD_Remote_Clone does | ✅ working on HD_Remote_Clone's handheld: Bedtime and a preset saved from the page (Afternoon Sun), alternated 5 times each, with no misses (John, 2026-11-26) |
 | Presets: run, save from the page's positions, delete; kept in flash | ✅ working |
 | Remote ID | Borrowed from HD_Remote_Clone's flash on the same board; no ID of its own yet |
 
@@ -130,13 +130,13 @@ The frame formats and timings come from HD_Remote_Clone's [RF_PROTOCOL.md](https
 
 ## Assumptions and open questions
 
-- **Position is the rail's height** on every shade: 0 at the bottom, 255 at the top. The presets agree with this, but it hasn't been checked on a top-down shade. If it's wrong, the drawing for that shade type needs flipping. This is open item 1 in HD_Remote_Clone's feature ideas (what position means on a top-down shade).
+- **Position is the rail's height** on both shade types: 0 at the bottom, 255 at the top. Confirmed on bottom-up shades by HD_Remote_Clone's test (group 4, 2026-11-18) and on top-down shades from this bridge: Sunset put groups 1 and 3 where the page draws them (John, 2026-11-26). So the page's drawing is right for both types. This answers open item 1 in HD_Remote_Clone's feature ideas.
 - **No password by default.** The page is open to anyone on the network until `web pass` is set, and the login travels unencrypted over plain HTTP. That was acceptable for a dry run; now that the bridge can move real shades, it needs rethinking.
-- **Wi-Fi and the shade radio share 2.4 GHz.** The shades use 2433, 2452 and 2471 MHz, which overlap Wi-Fi channels 6 and 11. How well the two coexist on one board is being tried (first test 2026-11-26, Wi-Fi on channel 11).
+- **Wi-Fi and the shade radio share 2.4 GHz.** The shades use 2433, 2452 and 2471 MHz, which overlap Wi-Fi channels 6 and 11. In the first test (2026-11-26, Wi-Fi on channel 11) 10 preset runs in a row arrived with Wi-Fi running on the same board. The bridge gets little Wi-Fi traffic beyond the page's own requests (John), so busy Wi-Fi isn't a concern. A miss rate over many more commands hasn't been measured; HD_Remote_Clone saw about 1 miss in 35 group commands without Wi-Fi.
 
 ## Next steps
 
-1. Confirm the shades respond to the bridge, and that Wi-Fi and the shade radio coexist.
+1. Measure the miss rate over many more commands.
 2. Give the bridge its own remote ID and pair it with the groups it controls.
 3. Decide what moves into HD_Remote_Clone, and how.
 

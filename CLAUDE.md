@@ -44,7 +44,7 @@ Report the HD_Remote_Clone commit checked against, and update the "Checked again
 ## Shades (stable facts)
 - Every shade has **one moving rail** (John, 2026-11-25). **Top-down**: fabric from the top of the window down to the rail. **Bottom-up**: fabric from the bottom up to the rail.
 - Groups 1 and 3 are top-down, 2 and 4 bottom-up; `GROUP_TYPE` in `src/web.cpp` is the source of truth.
-- A position is the **rail's height**, 0 at the bottom to 255 at the top. Confirmed on group 4's bottom-up shades (HD_Remote_Clone test, 2026-11-18); **not yet checked on a top-down shade**.
+- A position is the **rail's height**, 0 at the bottom to 255 at the top, on both types: bottom-up confirmed by HD_Remote_Clone's test (group 4, 2026-11-18), top-down from this bridge (groups 1 and 3, John, 2026-11-26). The page's drawing is right for both.
 
 ## Safety (applies once frames are really sent)
 - **Remote IDs are private:** never commit one (the repo is public). Redact as `xx xx` / `yy yy`, as HD_Remote_Clone does.
