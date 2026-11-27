@@ -3,4 +3,4 @@
 // Shown on serial (boot, `help`) and at the foot of the web page.
 #pragma once
 
-#define FW_VERSION "0.5.2"
+#define FW_VERSION "0.5.3"

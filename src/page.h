@@ -243,7 +243,7 @@ const secs=ms=>(ms/1000).toFixed(1)+' s';
 async function refresh(){
   let s;
   try{s=await (await fetch('/api/status')).json();}catch(e){$('#net').textContent='bridge not responding';return;}
-  $('#net').textContent=s.wifi.ssid+' · '+s.wifi.rssi+' dBm · ch '+s.wifi.ch+' · '+s.wifi.ip;
+  $('#net').textContent=s.wifi.host+' · '+s.wifi.ssid+' · '+s.wifi.rssi+' dBm · ch '+s.wifi.ch+' · '+s.wifi.ip;
   $('#dry').hidden=!s.dry_run;
   $('#ver').textContent='Shade bridge '+s.version+' · radio '+s.radio;
   $('#why').textContent=s.radio==='off'?'transmit turned off on serial':(s.radio||'no radio');

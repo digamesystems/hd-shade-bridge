@@ -57,7 +57,7 @@ static void handleStatus() {
   String j = "{\"version\":\"" FW_VERSION "\",\"dry_run\":" + String(radio::live() ? "false" : "true") + ",\"radio\":\"" +
              radio::state() + "\",\"uptime\":" + String(millis() / 1000);
   j += ",\"wifi\":{\"ssid\":\"" + esc(WiFi.SSID()) + "\",\"rssi\":" + String(WiFi.RSSI()) +
-       ",\"ch\":" + String(WiFi.channel()) + ",\"ip\":\"" + WiFi.localIP().toString() + "\"}";
+       ",\"ch\":" + String(WiFi.channel()) + ",\"ip\":\"" + WiFi.localIP().toString() + "\",\"host\":\"" + esc(net::hostname()) + "\"}";
   j += ",\"busy\":" + String(txq::busy() ? "true" : "false");
   j += ",\"current\":\"" + esc(txq::currentLabel()) + "\"";
   j += ",\"cur_total_ms\":" + String(txq::currentTotalMs());

@@ -28,6 +28,7 @@ static void printHelp() {
       "  wifi status           connection info and web address\n"
       "  wifi forget           erase saved network\n"
       "  web pass [password]   web page login (user admin); blank = no login\n"
+      "  name [hostname]       show or set the network name (default shade-bridge); after 'reboot'\n"
       "Shades (same queue as the web page):\n"
       "  grp <1-4|all> <up|down>\n"
       "  pos <mask> <0-255>    mask in hex, group bits 01-08, e.g. 05 = groups 1+3\n"
@@ -109,6 +110,18 @@ static void handleCommand(String line) {
     }
   } else if (cmd == "clear") {
     Serial.printf("Dropped %d queued job(s).\n", txq::clearPending());
+  } else if (cmd == "name") {
+    rest.trim();
+    if (rest.isEmpty()) {
+      Serial.printf("Hostname: %s", net::hostname().c_str());
+      if (net::savedHostname() != net::hostname())
+        Serial.printf(" (saved: %s, from the next 'reboot')", net::savedHostname().c_str());
+      Serial.println();
+    } else if (!net::setHostname(rest.equalsIgnoreCase("default") ? String() : rest)) {
+      Serial.println("Not a valid name: letters, digits and '-', not first or last, up to 32 characters.");
+    } else {
+      Serial.printf("Hostname saved: %s. It takes effect after 'reboot'.\n", net::savedHostname().c_str());
+    }
   } else if (cmd == "radio") {
     String sub = nextWord(rest);
     sub.toLowerCase();

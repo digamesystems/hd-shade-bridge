@@ -19,6 +19,7 @@ An experiment: a simple phone-and-tablet web UI for Hunter Douglas **Platinum Te
 | Send queue with HD_Remote_Clone's frame timings, merging waiting positions | ✅ working: host-tested (11 tests); merging checked on the board in dry run (2026-11-27) and live from a preset saved on the page (0.5.2, John, 2026-11-27). Marked working on 2026-11-26 before any of that; corrected |
 | Sending over an nRF24, exactly as HD_Remote_Clone does | ✅ working on HD_Remote_Clone's handheld: Bedtime and a preset saved from the page (Afternoon Sun), alternated 5 times each, with no misses (John, 2026-11-26) |
 | Presets: run, save from the page's positions, delete; kept in flash | ✅ working: save, replace, delete, error cases and survival across a reboot checked over the API on the board (2026-11-25); saved and run from the page by John (2026-11-26) |
+| Network name, set over serial (`name`), kept in flash | ✅ working: on the handheld, set to `shade-test`, rebooted, found as `shade-test.local` while `shade-bridge.local` was gone, then set back (2026-11-27). Router (DHCP) side not checked |
 | Remote ID | Borrowed from HD_Remote_Clone's flash on the same board; no ID of its own yet |
 
 The bridge transmits when it finds an nRF24 and a remote ID that HD_Remote_Clone's firmware stored on the board. Otherwise, or after `radio off` on serial, it runs as a **dry run**: every command goes through the real queue, with the real frames and timings, but each frame is printed on the serial console instead of transmitted, and no shade moves. The page shows a banner in dry run, and its footer shows the firmware version and radio state.
@@ -61,7 +62,7 @@ wifi pass <your password>
 wifi connect
 ```
 
-The board prints its address when it connects. It also registers the name `shade-bridge`, with your router and over mDNS, so `http://shade-bridge/` (or `http://shade-bridge.lan/`, depending on the router) and `http://shade-bridge.local/` usually work too; some Android phones don't resolve `.local` names. A DHCP reservation on the router keeps the address fixed. It reconnects on its own after a reboot or power cut.
+The board prints its address when it connects. It also registers a name, `shade-bridge` unless you change it with `name <hostname>` and `reboot`, with your router and over mDNS, so `http://shade-bridge/` (or `http://shade-bridge.lan/`, depending on the router) and `http://shade-bridge.local/` usually work too; some Android phones don't resolve `.local` names. A DHCP reservation on the router keeps the address fixed. It reconnects on its own after a reboot or power cut.
 
 After setup the board needs only USB power: a phone charger will do. The serial console is only for setup (`wifi …`, `web pass`), `radio on|off`, and watching frames go out. Keep it off batteries: Wi-Fi is always on, which would drain a battery in about a day.
 
@@ -82,6 +83,7 @@ The ESP32 only joins **2.4 GHz** Wi-Fi.
 | `presets` | List the presets |
 | `preset <name>` | Run a preset. A preset's name on its own also works, e.g. `bedtime` |
 | `queue` / `clear` | Show the queue / drop jobs that haven't started |
+| `name [hostname]` | Show the network name, or set it (letters, digits and `-`, up to 32 characters; `name default` = `shade-bridge`). Takes effect after `reboot` |
 | `radio [on\|off]` | Show the radio state, or turn transmitting off (dry run) and on again; on at boot |
 | `help`, `reboot` | |
 
@@ -94,7 +96,7 @@ The shade commands use the same names as HD_Remote_Clone's firmware, and the web
 | Endpoint | Purpose |
 |---|---|
 | `GET /` | The control page |
-| `GET /api/status` | Firmware version, radio state (`live`, `off`, `no radio`, `no remote ID`), queue (with the waiting jobs' labels), last-sent positions, Wi-Fi details, activity log |
+| `GET /api/status` | Firmware version, network name (`wifi.host`), radio state (`live`, `off`, `no radio`, `no remote ID`), queue (with the waiting jobs' labels), last-sent positions, Wi-Fi details, activity log |
 | `GET /api/groups` | Shade type per group (`top-down` / `bottom-up`) |
 | `GET /api/presets` | Presets: `[{"name":…,"steps":[[mask,pos],…]},…]` |
 | `POST /api/grp` | `group=1..4\|all`, `dir=up\|down` (not used by the page) |
@@ -113,7 +115,7 @@ src/main.cpp      serial console, setup and loop
 src/net.*         Wi-Fi client, saved settings, mDNS name
 src/radio.*       nRF24 transmitter, as HD_Remote_Clone's rf_tools.cpp
 src/txqueue.*     send queue and presets kept in flash
-lib/bridgecore/   logic with no Arduino code, tested on the PC: the merge rule
+lib/bridgecore/   logic with no Arduino code, tested on the PC: the merge rule, hostname checking
 test/             host tests (`pio test -e native`)
 src/version.h     firmware version
 src/web.*         HTTP routes, optional login, shade types
@@ -141,7 +143,7 @@ The frame formats and timings come from HD_Remote_Clone's [RF_PROTOCOL.md](https
 
 ## Next steps
 
-1. Make the hostname configurable over serial, saved in flash (planned).
+1. Schedules: every preset can be scheduled, clock time first, one time a day (John, 2026-11-27); design in [docs/FEATURE_EXPLORATION.md](docs/FEATURE_EXPLORATION.md#schedules-and-a-sun-trigger).
 2. Run the first user test and turn what the tester runs into into page changes: checklist in [docs/FEATURE_EXPLORATION.md](docs/FEATURE_EXPLORATION.md#first-user-test).
 3. Measure the miss rate over many more commands.
 4. Give the bridge its own remote ID and pair it with the groups it controls.

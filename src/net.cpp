@@ -3,12 +3,14 @@
 #include <ESPmDNS.h>
 #include <Preferences.h>
 #include <WiFi.h>
+#include <hostname.h>
 
 namespace net {
 
 static Preferences prefs;
 static String ssid_, pass_, webpw_;
-static const char *host_ = "esp32";
+static String host_;         // in use since boot
+static String defaultHost_;  // when none is saved
 static void (*onUp_)() = nullptr;
 static bool upOnce_ = false;
 static wl_status_t last_ = WL_IDLE_STATUS;
@@ -26,13 +28,18 @@ static void connect() {
   WiFi.begin(ssid_.c_str(), pass_.c_str());
 }
 
-void begin(const char *hostname, void (*onFirstConnect)()) {
-  host_ = hostname;
+void begin(const char *defaultHostname, void (*onFirstConnect)()) {
+  defaultHost_ = defaultHostname;
   onUp_ = onFirstConnect;
-  WiFi.setHostname(hostname);  // before mode(), or it's ignored
+  prefs.begin("wifi", false);
+  // A saved name is used only if it's still valid (bridge::normalizeHostname).
+  char checked[bridge::MAX_HOSTNAME + 1];
+  String saved = load("host");
+  host_ = (!saved.isEmpty() && bridge::normalizeHostname(saved.c_str(), checked)) ? String(checked)
+                                                                                    : defaultHost_;
+  WiFi.setHostname(host_.c_str());  // before mode(), or it's ignored
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
-  prefs.begin("wifi", false);
   ssid_ = load("ssid");
   pass_ = load("pass");
   webpw_ = load("webpw");
@@ -51,10 +58,10 @@ void poll() {
     String ip = WiFi.localIP().toString();
     if (!upOnce_) {
       upOnce_ = true;
-      if (MDNS.begin(host_)) MDNS.addService("http", "tcp", 80);
+      if (MDNS.begin(host_.c_str())) MDNS.addService("http", "tcp", 80);
       if (onUp_) onUp_();
     }
-    Serial.printf("\r\nWi-Fi connected. Open http://%s/ or http://%s.local/\n> ", ip.c_str(), host_);
+    Serial.printf("\r\nWi-Fi connected. Open http://%s/ or http://%s.local/\n> ", ip.c_str(), host_.c_str());
   } else if (s == WL_CONNECT_FAILED || s == WL_NO_SSID_AVAIL) {
     Serial.printf("\r\nWi-Fi connection failed (%s). Check 'wifi ssid' / 'wifi pass'.\n> ",
                   s == WL_NO_SSID_AVAIL ? "network not found" : "auth failed");
@@ -95,12 +102,36 @@ void printStatus() {
   Serial.printf("Saved SSID : %s\n", ssid_.isEmpty() ? "(none)" : ssid_.c_str());
   Serial.printf("Password   : %s\n", pass_.isEmpty() ? "(none)" : "********");
   Serial.printf("Web login  : %s\n", webpw_.isEmpty() ? "none (page is open to the LAN)" : "admin / ********");
+  String saved = savedHostname();
+  if (saved == host_) Serial.printf("Hostname   : %s\n", host_.c_str());
+  else Serial.printf("Hostname   : %s (saved: %s, from the next 'reboot')\n", host_.c_str(), saved.c_str());
   if (WiFi.status() == WL_CONNECTED) {
     Serial.printf("Connected  : yes, ch %d, RSSI %d dBm\n", WiFi.channel(), WiFi.RSSI());
-    Serial.printf("Web page   : http://%s/  or  http://%s.local/\n", WiFi.localIP().toString().c_str(), host_);
+    Serial.printf("Web page   : http://%s/  or  http://%s.local/\n", WiFi.localIP().toString().c_str(),
+                  host_.c_str());
   } else {
     Serial.println("Connected  : no");
   }
+}
+
+String hostname() { return host_; }
+
+String savedHostname() {
+  char checked[bridge::MAX_HOSTNAME + 1];
+  String saved = load("host");
+  return (!saved.isEmpty() && bridge::normalizeHostname(saved.c_str(), checked)) ? String(checked)
+                                                                                  : defaultHost_;
+}
+
+bool setHostname(const String &name) {
+  if (name.isEmpty()) {
+    prefs.remove("host");
+    return true;
+  }
+  char checked[bridge::MAX_HOSTNAME + 1];
+  if (!bridge::normalizeHostname(name.c_str(), checked)) return false;
+  prefs.putString("host", checked);
+  return true;
 }
 
 String webPassword() { return webpw_; }

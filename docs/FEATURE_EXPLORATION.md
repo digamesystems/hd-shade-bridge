@@ -79,6 +79,14 @@ One frame carries one position, so only commands with the same target can share 
 - **No replay after a reboot** (his current inclination): a missed event isn't sent late; the bridge waits for the next scheduled change, since people may have used the handheld meanwhile.
 - **Decided:** tests use San José International Airport (SJC) as their location, never the house's coordinates. The form-post security fix waits until later.
 
+**Decided (John, 2026-11-27):**
+
+- **Every preset can be scheduled.** A schedule is an option on the preset itself, not a separate list; presets saved from the page get it too.
+- **Clock time first:** one time per preset, every day, on or off. More times or days of the week can come later.
+- **Later, "around now":** the user runs a preset and indicates that around the current time is when they want the shades to go there, and the bridge records that time. (Claude's note: the same gesture could later record the sun's position instead, for scenes like Sunset; see learning *N* below.)
+
+Claude's notes for the build: store schedules beside the presets, keyed by name, not inside the preset record, whose fixed flash layout would otherwise reset to the defaults and lose saved presets; and put the "does it fire now" logic in `lib/bridgecore` with host tests (midnight, daylight saving, reboots, the resend rule).
+
 **What a schedule needs (Proposed, Claude):**
 
 1. **The time:** the ESP32's NTP client (`configTzTime`) with a POSIX time-zone string such as `PST8PDT,M3.2.0,M11.1.0`, which handles daylight saving. No schedule fires until the time is known after a boot.
