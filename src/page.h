@@ -14,6 +14,8 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!doctype html>
 --acc:#62b49c;--acc-ink:#0c1d18;--warn:#f0b45a;--warn-bg:#382a13;--err:#ff8a80;--sky:#1e2a33;--fab:#6d604a;
 --fab2:#5f533f;--rail:#c9b48c}}
 *{box-sizing:border-box}
+/* `hidden` must win over any display rule (the time-zone banner is display:flex). */
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 main{max-width:760px;margin:0 auto;padding:16px 16px 40px}
 header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px;margin:4px 0 12px}
@@ -57,8 +59,16 @@ background:var(--rail);box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .presets{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
 .presets button{text-align:left;padding:10px 12px;overflow-wrap:anywhere}
 .presets small{display:block;color:var(--mute);font-size:12px;margin-top:2px}
-.presets.editing button{border-color:var(--err);color:var(--err)}
-.presets.editing button::before{content:"✕ "}
+.presets .when{color:var(--acc)}
+.pedit{display:flex;flex-direction:column;gap:4px;padding:10px 12px}
+.pedit .pname{font-weight:600;overflow-wrap:anywhere}
+.pedit small{color:var(--mute);font-size:12px}
+.pedit .row{flex-wrap:wrap;gap:6px;margin-top:4px}
+.pedit input[type=time]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);
+border-radius:8px;padding:6px 8px}
+.pedit label.on{display:flex;align-items:center;gap:4px;font-size:13px}
+.pedit .del{margin-left:auto;color:var(--err);border-color:var(--err)}
+.tzb{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px}
 .empty{color:var(--mute);font-size:13px}
 details.save{margin-top:10px;padding:0}
 details.save summary{padding:12px 14px;cursor:pointer;font-weight:600}
@@ -89,8 +99,11 @@ on air. The percentage is how much of the window the fabric covers. It shows wha
 don't report back.</p>
 
 <div class="h2row"><h2>Presets</h2><button class="ghost" id="edit">Edit</button></div>
+<div class="banner tzb" id="tzb" hidden><span>Schedules need this bridge's time zone.</span>
+<button class="ghost" id="tzset">Use this device's</button><span class="err" id="tzerr"></span></div>
 <div class="presets" id="presets"></div>
-<p class="hint" id="edithint" hidden>Tap a preset to delete it. Tap Done when finished.</p>
+<p class="hint" id="edithint" hidden>Give a preset a time and tick Daily to run it every day at that time; clear the
+time to remove it. Tap Done when finished.</p>
 <details class="card save" id="save">
 <summary>Save current positions as a preset</summary>
 <form id="saveform" autocomplete="off">
@@ -184,22 +197,48 @@ function column(g){
 let presets=[], editing=false;
 // "G4 100%, G2 0%": each step's groups at that step's position.
 const stepText=steps=>steps.map(([m,p])=>G.filter(g=>m&(1<<(g-1))).map(g=>'G'+g+' '+pct(g,p)+'%').join(', ')).join(', ');
+// "22:30" -> "10:30 PM", in the phone's own clock style.
+const clock=t=>{const [h,m]=t.split(':').map(Number);
+  return new Date(2000,0,1,h,m).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});};
 function renderPresets(){
   const box=$('#presets');box.textContent='';
-  box.classList.toggle('editing',editing);
   if(!presets.length){const e=document.createElement('div');e.className='empty';
     e.textContent='No presets yet. Set the shades above, then save their positions below.';box.appendChild(e);}
   presets.forEach(p=>{
+    if(editing){box.appendChild(editCard(p));return;}
     const b=document.createElement('button'), s=document.createElement('small');
     b.append(p.name);s.textContent=stepText(p.steps);b.appendChild(s);
-    b.onclick=async()=>{
-      if(!editing){post('/api/preset',{name:p.name});return;}
-      if(!confirm('Delete preset "'+p.name+'"?'))return;
-      if((await post('/api/preset/delete',{name:p.name})).ok) loadPresets();
-    };
+    if(p.time&&p.on){const w=document.createElement('small');w.className='when';
+      w.textContent='⏰ '+clock(p.time)+' daily';b.appendChild(w);}
+    b.onclick=()=>post('/api/preset',{name:p.name});
     box.appendChild(b);
   });
 }
+// Edit mode: a preset's daily time, on or off, and Delete.
+function editCard(p){
+  const c=document.createElement('div');c.className='card pedit';
+  const n=document.createElement('div');n.className='pname';n.textContent=p.name;
+  const s=document.createElement('small');s.textContent=stepText(p.steps);
+  const row=document.createElement('div');row.className='row';
+  const t=document.createElement('input');t.type='time';t.value=p.time||'';
+  t.setAttribute('aria-label','Daily time for '+p.name);
+  const l=document.createElement('label');l.className='on';
+  const on=document.createElement('input');on.type='checkbox';on.checked=!!p.time&&p.on;on.disabled=!p.time;
+  l.append(on,' Daily');
+  const d=document.createElement('button');d.className='ghost del';d.textContent='Delete';
+  const err=document.createElement('div');err.className='err';
+  const save=async()=>{if((await post('/api/preset/schedule',{name:p.name,time:t.value,on:on.checked?1:0},err)).ok)loadPresets();};
+  t.onchange=()=>{if(t.value&&!p.time)on.checked=true;save();};
+  on.onchange=save;
+  d.onclick=async()=>{if(!confirm('Delete preset "'+p.name+'"?'))return;
+    if((await post('/api/preset/delete',{name:p.name},err)).ok)loadPresets();};
+  row.append(t,l,d);c.append(n,s,row,err);
+  return c;
+}
+// One tap: this phone's time zone (an IANA name such as America/Los_Angeles).
+const myZone=(()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'';}catch(e){return '';}})();
+$('#tzset').textContent='Use this device’s ('+(myZone||'unknown')+')';
+$('#tzset').onclick=()=>post('/api/tz',{zone:myZone},$('#tzerr'));
 function loadPresets(){
   return fetch('/api/presets').then(r=>r.json()).then(list=>{presets=list;renderPresets();}).catch(()=>{});
 }
@@ -245,7 +284,9 @@ async function refresh(){
   try{s=await (await fetch('/api/status')).json();}catch(e){$('#net').textContent='bridge not responding';return;}
   $('#net').textContent=s.wifi.host+' · '+s.wifi.ssid+' · '+s.wifi.rssi+' dBm · ch '+s.wifi.ch+' · '+s.wifi.ip;
   $('#dry').hidden=!s.dry_run;
-  $('#ver').textContent='Shade bridge '+s.version+' · radio '+s.radio;
+  $('#tzb').hidden=!!s.tz;
+  $('#ver').textContent='Shade bridge '+s.version+' · radio '+s.radio+' · '+
+    (!s.tz?'time zone not set':s.time?'bridge time '+clock(s.time):'waiting for the time');
   $('#why').textContent=s.radio==='off'?'transmit turned off on serial':(s.radio||'no radio');
   s.pos.forEach((p,i)=>{
     const g=i+1, w=$('#w'+g);

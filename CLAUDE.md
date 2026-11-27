@@ -69,9 +69,10 @@ Report the HD_Remote_Clone commit checked against, and update the "Checked again
 | Status, page, serial commands, Web API, open questions, next steps | `README.md` |
 | Ideas being explored, and what's built of them | `docs/FEATURE_EXPLORATION.md` |
 | Send queue, presets in flash | `src/txqueue.*` |
-| The merge rule, hostname checking (host-tested) | `lib/bridgecore/src/`, `test/test_native_*/` |
+| The merge rule, hostname checking, schedule timing (host-tested) | `lib/bridgecore/src/`, `test/test_native_*/` |
 | HTTP routes, login, shade types | `src/web.*` |
 | The page (HTML/CSS/JS in one string) | `src/page.h` |
 | Serial console, setup, loop | `src/main.cpp` |
 | Wi-Fi, saved settings, hostname, mDNS | `src/net.*` |
+| Preset schedules, time zone, NTP clock (not `sched.h`: that's a system header) | `src/schedules.*` |
 | RF protocol, frame timings, shade tests | HD_Remote_Clone `docs/RF_PROTOCOL.md`, `docs/FIRMWARE.md` |

@@ -9,6 +9,8 @@
 #include <Arduino.h>
 #include "net.h"
 #include "radio.h"
+#include "schedules.h"
+#include <schedule.h>
 #include "txqueue.h"
 #include "version.h"
 #include "web.h"
@@ -34,6 +36,8 @@ static void printHelp() {
       "  pos <mask> <0-255>    mask in hex, group bits 01-08, e.g. 05 = groups 1+3\n"
       "  presets               list presets (saved and deleted on the web page)\n"
       "  preset <name>         run a preset; a name alone works too, e.g. bedtime\n"
+      "  schedule <HH:MM|on|off|clear> <preset>   a preset's daily time\n"
+      "  tz [zone]             show or set the time zone, e.g. America/Los_Angeles\n"
       "  queue                 what's sending and queued\n"
       "  clear                 drop queued jobs\n"
       "Radio:\n"
@@ -95,8 +99,13 @@ static void handleCommand(String line) {
     report(txq::position((uint8_t)mask, p.toInt()));
   } else if (cmd == "presets") {
     if (!txq::presetCount()) Serial.println("No presets. Save one from the web page.");
-    for (int i = 0; i < txq::presetCount(); i++)
-      Serial.printf("  %-24s %s\n", txq::presetName(i), txq::presetSummary(i).c_str());
+    for (int i = 0; i < txq::presetCount(); i++) {
+      String name = txq::presetName(i);
+      char hhmm[6];
+      bridge::formatClock(sched::minuteFor(name), hhmm);
+      Serial.printf("  %-24s %-28s %s%s\n", name.c_str(), txq::presetSummary(i).c_str(), hhmm,
+                    hhmm[0] ? (sched::isOn(name) ? " daily" : " (off)") : "");
+    }
   } else if (cmd == "preset") {
     rest.trim();
     if (!txq::presetExists(rest)) Serial.println("No such preset. Type 'presets' to list them.");
@@ -122,6 +131,28 @@ static void handleCommand(String line) {
     } else {
       Serial.printf("Hostname saved: %s. It takes effect after 'reboot'.\n", net::savedHostname().c_str());
     }
+  } else if (cmd == "tz") {
+    rest.trim();
+    if (!rest.isEmpty() && !sched::setZone(rest))
+      Serial.println("Unknown time zone. US and Canadian zones and UTC, e.g. America/Los_Angeles.");
+    char hhmm[6];
+    bridge::formatClock(sched::nowMinute(), hhmm);
+    Serial.printf("Time zone: %s; bridge time: %s\n", sched::zone().isEmpty() ? "(not set)" : sched::zone().c_str(),
+                  hhmm[0] ? hhmm : "(not known yet)");
+  } else if (cmd == "schedule") {
+    String when = nextWord(rest);
+    rest.trim();
+    when.toLowerCase();
+    if (!txq::presetExists(rest)) {
+      Serial.println("Usage: schedule <HH:MM|on|off|clear> <preset name>");
+      return;
+    }
+    int m = sched::minuteFor(rest), t = bridge::parseClock(when.c_str());
+    bool ok;
+    if (when == "clear") ok = sched::set(rest, -1, false);
+    else if (when == "on" || when == "off") ok = m >= 0 && sched::set(rest, m, when == "on");
+    else ok = t >= 0 && sched::set(rest, t, true);
+    if (!ok) Serial.println("Not changed: a time is HH:MM, and on/off needs a time set first.");
   } else if (cmd == "radio") {
     String sub = nextWord(rest);
     sub.toLowerCase();
@@ -172,6 +203,7 @@ void setup() {
   txq::beginPresets();
   radio::begin();
   net::begin(HOSTNAME, web::begin);
+  sched::begin();
   Serial.print("> ");
 }
 
@@ -179,5 +211,6 @@ void loop() {
   pollSerial();
   net::poll();
   txq::poll();
+  sched::poll();
   web::poll();
 }

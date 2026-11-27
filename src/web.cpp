@@ -5,6 +5,8 @@
 #include "net.h"
 #include "page.h"
 #include "radio.h"
+#include "schedules.h"
+#include <schedule.h>
 #include "version.h"
 #include "txqueue.h"
 
@@ -56,6 +58,10 @@ static void handleStatus() {
   if (!authed()) return;
   String j = "{\"version\":\"" FW_VERSION "\",\"dry_run\":" + String(radio::live() ? "false" : "true") + ",\"radio\":\"" +
              radio::state() + "\",\"uptime\":" + String(millis() / 1000);
+  // Bridge clock (local, "HH:MM"), "" until the time is known; time zone, "" if not set.
+  char hhmm[6];
+  bridge::formatClock(sched::nowMinute(), hhmm);
+  j += ",\"time\":\"" + String(hhmm) + "\",\"tz\":\"" + esc(sched::zone()) + "\"";
   j += ",\"wifi\":{\"ssid\":\"" + esc(WiFi.SSID()) + "\",\"rssi\":" + String(WiFi.RSSI()) +
        ",\"ch\":" + String(WiFi.channel()) + ",\"ip\":\"" + WiFi.localIP().toString() + "\",\"host\":\"" + esc(net::hostname()) + "\"}";
   j += ",\"busy\":" + String(txq::busy() ? "true" : "false");
@@ -79,7 +85,8 @@ static void fail(int code, const String &msg) {
   server.send(code, "application/json", "{\"ok\":false,\"error\":\"" + esc(msg) + "\"}");
 }
 
-// [{"name":"Bedtime","steps":[[mask,pos],...]}, ...]; the page shows positions as %.
+// [{"name":"Bedtime","steps":[[mask,pos],...],"time":"22:30","on":true}, ...]; the page shows
+// positions as %. "time" is "" for a preset with no schedule.
 static void handlePresets() {
   if (!authed()) return;
   String j = "[";
@@ -87,7 +94,10 @@ static void handlePresets() {
     j += String(i ? "," : "") + "{\"name\":\"" + esc(txq::presetName(i)) + "\",\"steps\":[";
     for (int k = 0; k < txq::presetSteps(i); k++)
       j += String(k ? "," : "") + "[" + String(txq::presetMask(i, k)) + "," + String(txq::presetPos(i, k)) + "]";
-    j += "]}";
+    char hhmm[6];
+    String name = txq::presetName(i);
+    bridge::formatClock(sched::minuteFor(name), hhmm);
+    j += "],\"time\":\"" + String(hhmm) + "\",\"on\":" + String(sched::isOn(name) ? "true" : "false") + "}";
   }
   server.send(200, "application/json", j + "]");
 }
@@ -106,7 +116,28 @@ static void handlePresetSave() {
 
 static void handlePresetDelete() {
   if (!authed()) return;
-  if (!txq::deletePreset(server.arg("name"))) return fail(404, "No such preset, or the flash write failed");
+  String name = server.arg("name");
+  if (!txq::deletePreset(name)) return fail(404, "No such preset, or the flash write failed");
+  sched::forget(name);
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
+// name=<preset>, time=HH:MM ("" clears it), on=1|0.
+static void handlePresetSchedule() {
+  if (!authed()) return;
+  String name = server.arg("name"), t = server.arg("time");
+  if (!txq::presetExists(name)) return fail(404, "No such preset");
+  int minute = t.isEmpty() ? -1 : bridge::parseClock(t.c_str());
+  if (!t.isEmpty() && minute < 0) return fail(400, "Time must be HH:MM, 00:00 to 23:59");
+  if (!sched::set(name, minute, server.arg("on") != "0")) return fail(400, "Couldn't save the schedule");
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
+// zone=<IANA name>, e.g. America/Los_Angeles (the page sends the phone's).
+static void handleTz() {
+  if (!authed()) return;
+  String z = server.arg("zone");
+  if (!sched::setZone(z)) return fail(400, "Unknown time zone: " + z);
   server.send(200, "application/json", "{\"ok\":true}");
 }
 
@@ -150,6 +181,8 @@ void begin() {
   });
   server.on("/api/preset/save", HTTP_POST, handlePresetSave);
   server.on("/api/preset/delete", HTTP_POST, handlePresetDelete);
+  server.on("/api/preset/schedule", HTTP_POST, handlePresetSchedule);
+  server.on("/api/tz", HTTP_POST, handleTz);
   server.on("/api/clear", HTTP_POST, [] {
     if (!authed()) return;
     int n = txq::clearPending();
