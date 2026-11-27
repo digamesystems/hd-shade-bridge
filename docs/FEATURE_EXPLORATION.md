@@ -8,7 +8,7 @@ Ideas being explored for the bridge, and what's been built of them. Each one say
 |---|---|---|---|
 | [Combine commands](#combine-commands-to-save-air-time) | Yes: waiting positions to the same target share one frame, and a newer target replaces a waiting one. Host-tested, checked on the board, confirmed live by John | Keep merging on | A new target while a shade is moving; masks `0F` and `FF` untried for positions |
 | [First user test](#first-user-test) | A checklist of what to watch | — | Results not yet recorded |
-| [Schedules and a sun trigger](#schedules-and-a-sun-trigger) | One daily clock time per preset, with NTP and a time zone set from the page. Checked over the API in dry run; page controls confirmed by John | Every preset can be scheduled; clock time first; "around now" later; tests use SJC | Not built: "around now", the sun-elevation trigger, learning the threshold, a follow-up resend. For John: location setup, how the threshold is learned, what happens at sunset, whether a resend counts under the RF rule |
+| [Schedules and a sun trigger](#schedules-and-a-sun-trigger) | One daily clock time per preset, with NTP and a time zone set from the page. Checked over the API in dry run; page controls confirmed by John | Every preset can be scheduled; clock time first; "around now" later; no follow-up resend; tests use SJC | Not built: "around now", the sun-elevation trigger, learning the threshold. For John: location setup, how the threshold is learned, what happens at sunset |
 
 ## Combine commands to save air time
 
@@ -84,7 +84,7 @@ One frame carries one position, so only commands with the same target can share 
 - Bedtime and Waketime are tied to clock time.
 - Setup must stay simple for a non-technical user.
 - **Learning the trigger** (his idea): when someone sets the shades for glare, the time tells the bridge where the sun is, so the threshold can be learned instead of entered.
-- **The user's own command wins** (his current view): if someone moves a shade after a scheduled preset fires, the schedule's follow-up resend leaves that group alone.
+- **The user's own command wins** (his view at the time): if someone moves a shade after a scheduled preset fires, the schedule's follow-up resend leaves that group alone. Moot since John decided on no resend (below).
 - **No replay after a reboot** (his current inclination): a missed event isn't sent late; the bridge waits for the next scheduled change, since people may have used the handheld meanwhile.
 - **Decided:** tests use San José International Airport (SJC) as their location, never the house's coordinates. The form-post security fix waits until later.
 
@@ -92,9 +92,10 @@ One frame carries one position, so only commands with the same target can share 
 
 - **Every preset can be scheduled.** A schedule is an option on the preset itself, not a separate list; presets saved from the page get it too.
 - **Clock time first:** one time per preset, every day, on or off. More times or days of the week can come later.
+- **No follow-up resend.** A scheduled preset goes on air exactly as a tap on the page sends it. Each command repeats its frames for about 1.8 s across channels 33/52/71, as HD_Remote_Clone does. If a shade still misses it, the user taps the preset to send it again. The shades can't report back, so this is the simplest way to handle an occasional miss.
 - **Later, "around now":** the user runs a preset and indicates that around the current time is when they want the shades to go there, and the bridge records that time. (Claude's note: the same gesture could later record the sun's position instead, for scenes like Sunset; see learning *N* below.)
 
-Claude's notes for the build: store schedules beside the presets, keyed by name, not inside the preset record, whose fixed flash layout would otherwise reset to the defaults and lose saved presets; and put the "does it fire now" logic in `lib/bridgecore` with host tests (midnight, daylight saving, reboots, the resend rule).
+Claude's notes for the build: store schedules beside the presets, keyed by name, not inside the preset record, whose fixed flash layout would otherwise reset to the defaults and lose saved presets; and put the "does it fire now" logic in `lib/bridgecore` with host tests (midnight, daylight saving, reboots).
 
 **What a schedule needs (Proposed, Claude):**
 
@@ -102,7 +103,7 @@ Claude's notes for the build: store schedules beside the presets, keyed by name,
 2. **The sun's position, computed on the board:** NOAA's solar position formula (about 50 lines, accurate to about a minute) from date, time, latitude and longitude, giving elevation and azimuth. No internet service. It goes in `lib/bridgecore` with host tests at SJC, checked against NOAA's solar calculator for a few dates.
 3. **Schedule entries in flash**, stored like the presets: a preset, a trigger (a clock time, or the sun falling below *N*° in the afternoon), days of the week, on/off.
 4. **A once-a-minute check.** Each entry fires at most once a day. The sun trigger fires on the afternoon *crossing* below *N* (falling, after solar noon), not on "below *N*", so a reboot in the evening doesn't fire it again.
-5. **One resend** about a minute later, to cover missed commands (about 1 in 35 on the handheld), skipping any group the user has moved since. Scheduled sends use the same queue, merging and 5 s cap as everything else. Open: whether a resend counts as RF protocol behaviour under the rule in CLAUDE.md (like merging, it chooses which commands to send, not how).
+5. **Not taken (John decided no resend, above):** one resend about a minute later, to cover missed commands (about 1 in 35 on the handheld), skipping any group the user has moved since. Scheduled sends use the same queue, merging and 5 s cap as everything else. Open: whether a resend counts as RF protocol behaviour under the rule in CLAUDE.md (like merging, it chooses which commands to send, not how).
 6. **The page shows each entry's next run**, e.g. "Sunset mode: today 3:52 pm": also the easiest check that the time and location are right.
 
 **Sunset mode: trigger on sun elevation (Proposed, Claude).** A fixed offset such as "1 hour before sunset" drifts across the year. Glare starts when the sun gets low enough to reach under the eaves, at roughly the same elevation all year, so the trigger is "run Sunset when the sun falls below *N*° in the afternoon". An azimuth condition could be added if a window proves partly shaded; not needed to start. What happens at sunset itself, if anything, is John's call. It fires on cloudy days too.
@@ -128,10 +129,10 @@ Claude's notes for the build: store schedules beside the presets, keyed by name,
 
 Whole-degree coordinates stay within about 2 minutes; defaulting to the time zone's city drifts by up to 20 minutes by summer, too much for glare. Rerun this as a host test once the bridge has its own sun code.
 
-**Built (2026-11-27, fw 0.5.4): clock-time schedules.** Every preset can have one daily time, on or off, stored beside the presets keyed by name (saved presets kept). Time from NTP in a time zone set from the page in one tap (US and Canadian zones and UTC). When a schedule fires is `bridge::shouldFire()` in [lib/bridgecore/src/schedule.cpp](../lib/bridgecore/src/schedule.cpp), with host tests: it fires when the clock enters its minute, once a day; nothing fires in the first minute after a boot (John's view: no replay); a time repeated when the clocks go back runs once. **No follow-up resend yet:** whether a resend counts under the RF rule is still John's to decide. Checked on the handheld over the API in dry run (2026-11-27): the clock matched the PC's, a preset fired in its minute, schedules survived a reboot, and nothing fired after a reboot inside a schedule's minute. The page's controls confirmed by John on PC and phone (2026-11-27). Found by John on the page: the time-zone banner stayed up after the zone was set (its CSS `display:flex` overrode `hidden`); fixed in 0.5.5, checked in a headless-browser render with and without a zone.
+**Built (2026-11-27, fw 0.5.4): clock-time schedules.** Every preset can have one daily time, on or off, stored beside the presets keyed by name (saved presets kept). Time from NTP in a time zone set from the page in one tap (US and Canadian zones and UTC). When a schedule fires is `bridge::shouldFire()` in [lib/bridgecore/src/schedule.cpp](../lib/bridgecore/src/schedule.cpp), with host tests: it fires when the clock enters its minute, once a day; nothing fires in the first minute after a boot (John's view: no replay); a time repeated when the clocks go back runs once. **No follow-up resend**, as John decided (above). Checked on the handheld over the API in dry run (2026-11-27): the clock matched the PC's, a preset fired in its minute, schedules survived a reboot, and nothing fired after a reboot inside a schedule's minute. The page's controls confirmed by John on PC and phone (2026-11-27). Found by John on the page: the time-zone banner stayed up after the zone was set (its CSS `display:flex` overrode `hidden`); fixed in 0.5.5, checked in a headless-browser render with and without a zone.
 
 **Order (Proposed, Claude):** (1) NTP, time zone, clock schedules and "next run" on the page: built in 0.5.4 (above), except that the page shows each preset's daily time, not a "next run"; (2) sun position and the elevation trigger; (3) learning *N*. Each step is useful alone. "Around now" (John's, above) isn't in this list yet.
 
-**Open for John:** the location setup; how *N* is learned; what Sunset mode does at sunset; whether resends count as RF protocol behaviour.
+**Open for John:** the location setup; how *N* is learned; what Sunset mode does at sunset.
 
 Background: the original Platinum App Bridge timed scenes on the bridge itself, with weekday/weekend times and, from 2014, fixed offsets from sunrise or sunset, which reviewers found didn't fit their terrain.
