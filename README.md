@@ -14,11 +14,11 @@ An experiment: a simple phone-and-tablet web UI for Hunter Douglas **Platinum Te
 
 | Part | State |
 |---|---|
-| Wi-Fi setup over the serial console, credentials kept in the ESP32's flash | ✅ working |
+| Wi-Fi setup over the serial console, credentials kept in the ESP32's flash | ✅ working: set up by John on the dev module and the handheld; reconnected after every flash and reboot checked over the API since 2026-11-25, and after a move to a phone charger (John, 2026-11-26) |
 | Web page and JSON API | ✅ working: used from a phone and a desktop browser; runs on its own from a phone charger after setup (2026-11-26) |
-| Send queue with HD_Remote_Clone's frame timings, merging waiting positions | ✅ working |
+| Send queue with HD_Remote_Clone's frame timings, merging waiting positions | ✅ working: host-tested (11 tests); merging checked on the board in dry run (2026-11-27) and live from a preset saved on the page (0.5.2, John, 2026-11-27). Marked working on 2026-11-26 before any of that; corrected |
 | Sending over an nRF24, exactly as HD_Remote_Clone does | ✅ working on HD_Remote_Clone's handheld: Bedtime and a preset saved from the page (Afternoon Sun), alternated 5 times each, with no misses (John, 2026-11-26) |
-| Presets: run, save from the page's positions, delete; kept in flash | ✅ working |
+| Presets: run, save from the page's positions, delete; kept in flash | ✅ working: save, replace, delete, error cases and survival across a reboot checked over the API on the board (2026-11-25); saved and run from the page by John (2026-11-26) |
 | Remote ID | Borrowed from HD_Remote_Clone's flash on the same board; no ID of its own yet |
 
 The bridge transmits when it finds an nRF24 and a remote ID that HD_Remote_Clone's firmware stored on the board. Otherwise, or after `radio off` on serial, it runs as a **dry run**: every command goes through the real queue, with the real frames and timings, but each frame is printed on the serial console instead of transmitted, and no shade moves. The page shows a banner in dry run, and its footer shows the firmware version and radio state.
