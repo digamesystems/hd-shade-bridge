@@ -49,3 +49,17 @@ One frame carries one position, so only commands with the same target can share 
 
 - **A new target while a shade is moving.** This is untested (HD_Remote_Clone FEATURE_IDEAS, open item 2). Merging doesn't make it more likely, since a running job is never changed, but repeated drags will cause it.
 - **Mask `0F` (all four groups) hasn't been tried on its own.** Sums such as `06` worked. `FF` hasn't been tried for positions.
+
+## First user test
+
+**Raised by John (2026-11-26):** hand the page to a first-time user, a household member, with the radio live (fw 0.5.1), and see where they get stuck. The page has so far been tried only by the person who designed it.
+
+**What to watch (Proposed, Claude):**
+
+- **No explanation first.** Does the tester find, unaided, that you drag the rail (or tap where you want it)? Do they read "61%" as the share of the window the fabric covers? This tests the design rule that the page mirrors the shades.
+- **The pause while a command is on air.** The page waits about 1.8 s per command (each command goes out as HD_Remote_Clone sends it, phases back to back). Does it look stuck, and do they tap again? Repeats are harmless (a newer target replaces a waiting one), but a "sending…" cue may be needed.
+- **Saving a preset.** Ask them to set a couple of shades and save them as a new preset. Watch the group checkboxes and the name field.
+- **Edit and delete.** Is the red ✕ mode obvious, and is Done easy to find?
+- **Where they get stuck**, in their own words.
+
+**Results:** not yet recorded. Add what the tester ran into here, and the changes that follow from it.
