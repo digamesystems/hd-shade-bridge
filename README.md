@@ -20,7 +20,7 @@ An experiment: a simple phone-and-tablet web UI for Hunter Douglas **Platinum Te
 | Sending over an nRF24, exactly as HD_Remote_Clone does | ✅ working on HD_Remote_Clone's handheld: Bedtime and a preset saved from the page (Afternoon Sun), alternated 5 times each, with no misses (John, 2026-11-26) |
 | Presets: run, save from the page's positions, delete; kept in flash | ✅ working: save, replace, delete, error cases and survival across a reboot checked over the API on the board (2026-11-25); saved and run from the page by John (2026-11-26) |
 | Network name, set over serial (`name`), kept in flash | ✅ working: on the handheld, set to `shade-test`, rebooted, found as `shade-test.local` while `shade-bridge.local` was gone, then set back (2026-11-27). Confirmed working by John (2026-11-27) |
-| Schedules: a daily clock time for any preset, kept in flash; time from NTP in a time zone set from the page | ✅ working on the handheld, checked over the API in dry run (2026-11-27): time zone set, the bridge's clock matched the PC's, a preset fired in its minute through the queue, schedules and zone survived a reboot, and nothing fired after a reboot inside a schedule's minute. The page's controls not yet tried by a person |
+| Schedules: a daily clock time for any preset, kept in flash; time from NTP in a time zone set from the page | ✅ working on the handheld, checked over the API in dry run (2026-11-27): time zone set, the bridge's clock matched the PC's, a preset fired in its minute through the queue, schedules and zone survived a reboot, and nothing fired after a reboot inside a schedule's minute. The page's controls confirmed by John on PC and phone (2026-11-27) |
 | Remote ID | Borrowed from HD_Remote_Clone's flash on the same board; no ID of its own yet |
 
 The bridge transmits when it finds an nRF24 and a remote ID that HD_Remote_Clone's firmware stored on the board. Otherwise, or after `radio off` on serial, it runs as a **dry run**: every command goes through the real queue, with the real frames and timings, but each frame is printed on the serial console instead of transmitted, and no shade moves. The page shows a banner in dry run, and its footer shows the firmware version and radio state.
@@ -150,7 +150,7 @@ The frame formats and timings come from HD_Remote_Clone's [RF_PROTOCOL.md](https
 
 ## Next steps
 
-1. Schedules: try the page's controls; then "around now" (John, 2026-11-27) and the sun trigger. Design in [docs/FEATURE_EXPLORATION.md](docs/FEATURE_EXPLORATION.md#schedules-and-a-sun-trigger).
+1. Schedules: "around now" (John, 2026-11-27) and the sun trigger. Design in [docs/FEATURE_EXPLORATION.md](docs/FEATURE_EXPLORATION.md#schedules-and-a-sun-trigger).
 2. Run the first user test and turn what the tester runs into into page changes: checklist in [docs/FEATURE_EXPLORATION.md](docs/FEATURE_EXPLORATION.md#first-user-test).
 3. Measure the miss rate over many more commands.
 4. Give the bridge its own remote ID and pair it with the groups it controls.
