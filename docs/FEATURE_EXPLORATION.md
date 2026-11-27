@@ -99,7 +99,7 @@ One frame carries one position, so only commands with the same target can share 
 - **Later, optional:** an address box that asks OpenStreetMap's free geocoder from the phone's browser, so the bridge never touches the internet. Google's geocoding API was set aside: it needs a key and billing, and the key would sit on a device built from a public repo.
 - Serial fallbacks, like the Wi-Fi setup: e.g. `tz America/Los_Angeles`, `loc 37 -122`.
 
-**How rough can the location be?** A simulation in the review chat (simplified NOAA formula, 30 s steps): true location San José (37.34° N, 121.89° W), a 15° threshold learned once on 1 December in the bridge's assumed coordinates, then used all year. Minutes from the true 15° crossing (negative = early):
+**How rough can the location be?** A simulation in the review chat (simplified NOAA formula, 30 s steps): true location the SJC area (the tests' reference point; see CLAUDE.md), a 15° threshold learned once on 1 December in the bridge's assumed coordinates, then used all year. Minutes from the true 15° crossing (negative = early):
 
 | Bridge assumes | Learned N | 1 Mar | 1 Jun | 1 Sep |
 |---|---|---|---|---|
