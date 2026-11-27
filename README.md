@@ -4,6 +4,15 @@ An experiment: a simple phone-and-tablet web UI for Hunter Douglas **Platinum Te
 
 > Personal hobby project. Not affiliated with or endorsed by Hunter Douglas. "Hunter Douglas" and "Platinum" are their trademarks and are used here only to say what this works with.
 
+**TL;DR (summary checked 2026-11-27)**
+
+- **What it is:** ESP32 firmware that serves a page on the home Wi-Fi. On it you drag a shade group's rail to set its position, run, save and delete presets, and give any preset a daily time. No app and no cloud.
+- **What goes on air:** exactly what HD_Remote_Clone's firmware sends, sent the same way (frames, timings, channels), through an nRF24 and with the remote ID HD_Remote_Clone stored on the same board. Without a radio or an ID it's a dry run: the frames are printed on serial instead.
+- **The page mirrors the shades:** it offers only controls whose result it can draw, so there are no up/down arrows. The positions it shows are the last ones sent; the shades don't report back.
+- **One queue:** the page, the serial console and the schedules all add to one send queue. A position command takes about 1.8 s on air. Waiting positions are merged, so groups headed for the same position share one frame.
+- **Setup:** Wi-Fi is set over serial once; after that the board needs only USB power. The page has no login unless `web pass` sets one, and it's plain HTTP.
+- **Where it runs and what's shown working:** see the Status table below; each row names its evidence.
+
 ## Goals
 
 - **Echo some of the Platinum App Bridge's everyday features** in a page that's easy to use from a phone or tablet: setting each group's position, and one-tap scenes (presets). Up/down arrows were left out on purpose: the page only offers controls whose result it can show.
@@ -33,8 +42,8 @@ The page follows the device's light or dark setting.
 
 - **One column per group (GRP 1–4).** Each shows the shade as a window with its fabric, and the share of the window the fabric covers ("67%"). Drag the fabric's rail, or tap where you want it, and let go to send that position. Positions snap to whole percentages, so two shades that read the same % get exactly the same position, and a preset saved from them sends them in one frame. There are no up/down arrows: a group command runs a shade all the way to a limit without the page knowing, while a drag always shows where the rail was sent.
 - **Shade types.** In this house, groups 1 and 3 are top-down shades and groups 2 and 4 are bottom-up, so the fabric is drawn hanging from the top or rising from the bottom. The types are set in `GROUP_TYPE` in [src/web.cpp](src/web.cpp).
-- **Presets:** tap one to run it. To make one, set the shades with the drag controls, open **Save current positions as a preset**, give it a name and tick the groups it should set; unticked groups are left alone when it runs. Groups saved at the same position share one frame on air. **Edit** switches to deleting: tap a preset, confirm, then **Done**. Up to 12 presets, names up to 24 characters, kept in the ESP32's flash. The first boot adds Bedtime, Waketime and Sunset, HD_Remote_Clone's presets; they can be deleted like any other.
-- **Schedules:** in **Edit**, each preset has a time and a **Daily** switch: give it a time and it runs every day at that time; clear the time to remove it. A scheduled preset shows "⏰ 10:30 PM daily". The first time, a banner asks for the time zone: one tap takes the phone's. The footer shows the bridge's own clock, the easiest check that it's right. A schedule that's missed (the bridge was off, or rebooting) is skipped, not sent late; if the clocks go back, a time that happens twice runs once; if they go forward, a time that doesn't exist that night doesn't run. The bridge needs internet access for the time (NTP).
+- **Presets:** tap one to run it. To make one, set the shades with the drag controls, open **Save current positions as a preset**, give it a name and tick the groups it should set; unticked groups are left alone when it runs. Groups saved at the same position share one frame on air. **Edit** turns each preset into a card with its schedule (below) and a **Delete** button (asks to confirm); **Done** goes back. Up to 12 presets, names up to 24 characters, kept in the ESP32's flash. The first boot adds Bedtime, Waketime and Sunset, HD_Remote_Clone's presets; they can be deleted like any other.
+- **Schedules:** in **Edit**, each preset has a time and a **Daily** box: give it a time and it runs every day at that time (untick Daily to pause it); clear the time to remove it. A scheduled preset shows "⏰ 10:30 PM daily". The first time, a banner asks for the time zone: one tap takes the phone's. The footer shows the bridge's own clock, the easiest check that it's right. A schedule that's missed (the bridge was off, or rebooting) is skipped, not sent late; if the clocks go back, a time that happens twice runs once; if they go forward, a time that doesn't exist that night doesn't run. The bridge needs internet access for the time (NTP).
 - **Activity:** the queue (waiting commands listed in order), a progress bar, a log, and a button to clear the queue. With the radio live, the board can't answer the page while a command is on air (see [How it works](#how-it-works)), so the page doesn't show a command as sending: it pauses, then the log shows the command done. "Sending" and the moving progress bar only appear in dry run.
 
 Positions shown are the last ones *sent*. The shades only receive, so there's no way to read where they actually are.
@@ -66,7 +75,7 @@ wifi connect
 
 The board prints its address when it connects. It also registers a name, `shade-bridge` unless you change it with `name <hostname>` and `reboot`, with your router and over mDNS, so `http://shade-bridge/` (or `http://shade-bridge.lan/`, depending on the router) and `http://shade-bridge.local/` usually work too; some Android phones don't resolve `.local` names. A DHCP reservation on the router keeps the address fixed. It reconnects on its own after a reboot or power cut.
 
-After setup the board needs only USB power: a phone charger will do. The serial console is only for setup (`wifi …`, `web pass`), `radio on|off`, and watching frames go out. Keep it off batteries: Wi-Fi is always on, which would drain a battery in about a day.
+After setup the board needs only USB power: a phone charger will do. The serial console is only for setup (`wifi …`, `web pass`, `name`), `radio on|off`, and watching frames go out. Keep it off batteries: Wi-Fi is always on, which would drain a battery in about a day.
 
 The ESP32 only joins **2.4 GHz** Wi-Fi.
 

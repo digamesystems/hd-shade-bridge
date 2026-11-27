@@ -1,6 +1,14 @@
 # Feature exploration
 
-Ideas being explored for the bridge, before anything is built. Each one says who raised it and when, what it rests on, and what's still unknown. Ideas that prove useful may move into HD_Remote_Clone's [FEATURE_IDEAS.md](https://github.com/digamesystems/HD_Remote_Clone/blob/main/docs/FEATURE_IDEAS.md).
+Ideas being explored for the bridge, and what's been built of them. Each one says who raised it and when, what it rests on, and what's still unknown. Ideas that prove useful may move into HD_Remote_Clone's [FEATURE_IDEAS.md](https://github.com/digamesystems/HD_Remote_Clone/blob/main/docs/FEATURE_IDEAS.md).
+
+**TL;DR (summary checked 2026-11-27)**
+
+| Idea | Built | Decided (John) | Open |
+|---|---|---|---|
+| [Combine commands](#combine-commands-to-save-air-time) | Yes: waiting positions to the same target share one frame, and a newer target replaces a waiting one. Host-tested, checked on the board, confirmed live by John | Keep merging on | A new target while a shade is moving; masks `0F` and `FF` untried for positions |
+| [First user test](#first-user-test) | A checklist of what to watch | — | Results not yet recorded |
+| [Schedules and a sun trigger](#schedules-and-a-sun-trigger) | One daily clock time per preset, with NTP and a time zone set from the page. Checked over the API in dry run; page controls confirmed by John | Every preset can be scheduled; clock time first; "around now" later; tests use SJC | Not built: "around now", the sun-elevation trigger, learning the threshold, a follow-up resend. For John: location setup, how the threshold is learned, what happens at sunset, whether a resend counts under the RF rule |
 
 ## Combine commands to save air time
 
@@ -41,7 +49,8 @@ One frame carries one position, so only commands with the same target can share 
 **Built (2026-11-25, fw 0.4.0-dryrun):**
 
 - The queue merges positions as above. The rule is `planPosition()` in [lib/bridgecore/src/merge.cpp](../lib/bridgecore/src/merge.cpp), with host tests for each case in the table and the edge cases ([test/test_native_merge](../test/test_native_merge/test_main.cpp), 2026-11-27); `enqueuePos()` in [src/txqueue.cpp](../src/txqueue.cpp) applies its edits to the queue. Checked on the board the same day, in dry run (`radio off`): with G1 to 100 sending, G2 to 200 and G4 to 200 joined into one job; G2 to 50 trimmed it to G4 to 200 and queued G2 to 50; G4 to 50 then replaced G4 to 200 and joined, leaving one job, G2+G4 to 50.
-- **Drags snap to whole percentages** (fw 0.5.2, 2026-11-27). Found on the board: a preset of G2 and G4 both showing 63% held positions 161 and 160, so it went out as two frames. Equal-looking shades now get equal positions, and merge. Confirmed by John (2026-11-27): a re-saved preset of two groups at the same percentage "works as expected". One addition: only waiting positions after the last waiting group (up/down) command are touched, so a position never moves past an up/down for the same shade. The page doesn't send group commands, but the serial `grp` does.
+- **Drags snap to whole percentages** (fw 0.5.2, 2026-11-27). Found on the board: a preset of G2 and G4 both showing 63% held positions 161 and 160, so it went out as two frames. Equal-looking shades now get equal positions, and merge. Confirmed by John (2026-11-27): a re-saved preset of two groups at the same percentage "works as expected".
+- One addition to the proposed rule: only waiting positions after the last waiting group (up/down) command are touched, so a position never moves past an up/down for the same shade. The page doesn't send group commands, but the serial `grp` does.
 - Presets are queued one position per job, so they merge too. A job keeps the preset's name in its label ("Bedtime: G2+G4 to 255") unless it merges with a command from elsewhere.
 - The log says what happened: `queued`, `merged … now …`, `trimmed … now …`, `replaced`. The page's Activity card and the serial `queue` command list the waiting jobs.
 - Presets saved from the page already store groups at the same position as one step. The three seeded presets are kept as HD_Remote_Clone defines them; queue merging now gives `Bedtime` its one-frame saving anyway.
@@ -121,7 +130,7 @@ Whole-degree coordinates stay within about 2 minutes; defaulting to the time zon
 
 **Built (2026-11-27, fw 0.5.4): clock-time schedules.** Every preset can have one daily time, on or off, stored beside the presets keyed by name (saved presets kept). Time from NTP in a time zone set from the page in one tap (US and Canadian zones and UTC). When a schedule fires is `bridge::shouldFire()` in [lib/bridgecore/src/schedule.cpp](../lib/bridgecore/src/schedule.cpp), with host tests: it fires when the clock enters its minute, once a day; nothing fires in the first minute after a boot (John's view: no replay); a time repeated when the clocks go back runs once. **No follow-up resend yet:** whether a resend counts under the RF rule is still John's to decide. Checked on the handheld over the API in dry run (2026-11-27): the clock matched the PC's, a preset fired in its minute, schedules survived a reboot, and nothing fired after a reboot inside a schedule's minute. The page's controls confirmed by John on PC and phone (2026-11-27). Found by John on the page: the time-zone banner stayed up after the zone was set (its CSS `display:flex` overrode `hidden`); fixed in 0.5.5, checked in a headless-browser render with and without a zone.
 
-**Order, if built (Proposed, Claude):** (1) NTP, time zone, clock schedules and "next run" on the page; (2) sun position and the elevation trigger; (3) learning *N*. Each step is useful alone. The page part should wait for the first user test.
+**Order (Proposed, Claude):** (1) NTP, time zone, clock schedules and "next run" on the page: built in 0.5.4 (above), except that the page shows each preset's daily time, not a "next run"; (2) sun position and the elevation trigger; (3) learning *N*. Each step is useful alone. "Around now" (John's, above) isn't in this list yet.
 
 **Open for John:** the location setup; how *N* is learned; what Sunset mode does at sunset; whether resends count as RF protocol behaviour.
 

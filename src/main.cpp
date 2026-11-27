@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Shade bridge prototype: Wi-Fi setup over serial, a web page for positions
-// and presets, and a non-blocking send queue. Frames go out on an nRF24 when
+// Shade bridge prototype: Wi-Fi setup over serial, a web page for positions,
+// presets and their daily schedules, and a send queue that the loop steps
+// (it waits only while a command is on air). Frames go out on an nRF24 when
 // one is fitted and HD_Remote_Clone has stored a remote ID on the board;
 // otherwise they're printed instead (dry run).
 //

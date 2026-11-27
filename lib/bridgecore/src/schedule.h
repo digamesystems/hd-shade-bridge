@@ -2,7 +2,7 @@
 // Clock-time schedules for presets (docs/FEATURE_EXPLORATION.md, "Schedules
 // and a sun trigger"; John, 2026-11-27: every preset can be scheduled, clock
 // time first, one time a day). The parts that decide things, host-tested;
-// src/sched.cpp keeps the schedules and runs them.
+// src/schedules.cpp keeps the schedules and runs them.
 #pragma once
 #include <stdint.h>
 

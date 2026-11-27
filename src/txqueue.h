@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Send queue for shade commands (dry run: frames are printed, not transmitted).
+// Send queue for shade commands, and the presets kept in flash. Frames go out
+// through radio.* when it's live; in dry run they're printed instead.
 //
-// Web and serial requests enqueue jobs and return at once; poll() steps
-// through them from loop() so nothing blocks the web server or console.
+// Web, serial and schedule requests enqueue jobs and return at once; poll()
+// steps through them from loop(). In dry run nothing blocks; with the radio
+// live, poll() sends a whole command at once, as HD_Remote_Clone does (up to
+// about 1.8 s), and the web server and console wait for it.
 // A job is a short list of steps, each repeating one 5-byte Platinum
 // payload (ID ID MODE GROUP ACTION) for a set time on ch 33/52/71.
 #pragma once

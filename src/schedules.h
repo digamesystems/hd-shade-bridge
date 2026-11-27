@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// (Not "sched.h": that name is the system's POSIX header.) Clock-time schedules for presets (John, 2026-11-27): any preset can run at
-// one time a day, on or off. Kept in flash beside the presets, keyed by the
+// Clock-time schedules for presets (John, 2026-11-27): any preset can run at
+// one time a day, on or off. (Not "sched.h": that's the system's POSIX header.) Kept in flash beside the presets, keyed by the
 // preset's name, so the preset store's layout doesn't change. The time comes
 // from NTP in the time zone set from the page (or `tz` on serial). The rules
 // for when a schedule fires are bridge::shouldFire (lib/bridgecore).
