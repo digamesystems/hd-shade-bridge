@@ -6,7 +6,7 @@ An experiment: a simple phone-and-tablet web UI for Hunter Douglas **Platinum Te
 
 ## Goals
 
-- **Echo some of the Platinum App Bridge's everyday features** in a page that's easy to use from a phone or tablet: group up/down, setting a shade's position, and one-tap scenes (presets).
+- **Echo some of the Platinum App Bridge's everyday features** in a page that's easy to use from a phone or tablet: setting each group's position, and one-tap scenes (presets). Up/down arrows were left out on purpose: the page only offers controls whose result it can show.
 - **Keep it simple.** One small ESP32 firmware, no app to install, and no cloud: the page is served by the device itself.
 - **Find out what's worth keeping.** This is largely an experiment. Anything that proves useful is meant to move into HD_Remote_Clone, where the [Web interface and an always-on bridge](https://github.com/digamesystems/HD_Remote_Clone/blob/main/docs/FEATURE_IDEAS.md#web-interface-and-an-always-on-bridge) section of its feature ideas describes the larger plan.
 
@@ -15,7 +15,7 @@ An experiment: a simple phone-and-tablet web UI for Hunter Douglas **Platinum Te
 | Part | State |
 |---|---|
 | Wi-Fi setup over the serial console, credentials kept in the ESP32's flash | ✅ working |
-| Web page and JSON API | ✅ working (tested from a PC; phone use being tried) |
+| Web page and JSON API | ✅ working: used from a phone and a desktop browser; runs on its own from a phone charger after setup (2026-11-26) |
 | Send queue with HD_Remote_Clone's frame timings, merging waiting positions | ✅ working |
 | Sending over an nRF24, exactly as HD_Remote_Clone does | ✅ working on HD_Remote_Clone's handheld: Bedtime and a preset saved from the page (Afternoon Sun), alternated 5 times each, with no misses (John, 2026-11-26) |
 | Presets: run, save from the page's positions, delete; kept in flash | ✅ working |
@@ -32,7 +32,7 @@ The page follows the device's light or dark setting.
 - **One column per group (GRP 1–4).** Each shows the shade as a window with its fabric, and the share of the window the fabric covers ("67%"). Drag the fabric's rail, or tap where you want it, and let go to send that position. There are no up/down arrows: a group command runs a shade all the way to a limit without the page knowing, while a drag always shows where the rail was sent.
 - **Shade types.** In this house, groups 1 and 3 are top-down shades and groups 2 and 4 are bottom-up, so the fabric is drawn hanging from the top or rising from the bottom. The types are set in `GROUP_TYPE` in [src/web.cpp](src/web.cpp).
 - **Presets:** tap one to run it. To make one, set the shades with the drag controls, open **Save current positions as a preset**, give it a name and tick the groups it should set; unticked groups are left alone when it runs. Groups saved at the same position share one frame on air. **Edit** switches to deleting: tap a preset, confirm, then **Done**. Up to 12 presets, names up to 24 characters, kept in the ESP32's flash. The first boot adds Bedtime, Waketime and Sunset, HD_Remote_Clone's presets; they can be deleted like any other.
-- **Activity:** what's sending, what's queued, a progress bar, a log, and a button to clear the queue.
+- **Activity:** the queue (waiting commands listed in order), a progress bar, a log, and a button to clear the queue. With the radio live, the board can't answer the page while a command is on air (see [How it works](#how-it-works)), so the page doesn't show a command as sending: it pauses, then the log shows the command done. "Sending" and the moving progress bar only appear in dry run.
 
 Positions shown are the last ones *sent*. The shades only receive, so there's no way to read where they actually are.
 
@@ -60,7 +60,9 @@ wifi pass <your password>
 wifi connect
 ```
 
-The board prints its address when it connects. Open it in a browser, or try `http://shade-bridge.local/`. It reconnects on its own after a reboot.
+The board prints its address when it connects. It also registers the name `shade-bridge`, with your router and over mDNS, so `http://shade-bridge/` (or `http://shade-bridge.lan/`, depending on the router) and `http://shade-bridge.local/` usually work too; some Android phones don't resolve `.local` names. A DHCP reservation on the router keeps the address fixed. It reconnects on its own after a reboot or power cut.
+
+After setup the board needs only USB power: a phone charger will do. The serial console is only for setup (`wifi …`, `web pass`), `radio on|off`, and watching frames go out. Keep it off batteries: Wi-Fi is always on, which would drain a battery in about a day.
 
 The ESP32 only joins **2.4 GHz** Wi-Fi.
 
@@ -86,7 +88,7 @@ The shade commands use the same names as HD_Remote_Clone's firmware, and the web
 
 ## Web API
 
-`POST` bodies are form-encoded. Commands are queued and answered at once with `202`; the page polls `/api/status` for progress.
+`POST` bodies are form-encoded. Commands are queued and answered with `202` straight away, except while a command is on air: the board can't answer then, so a request waits up to about 1.8 s. The queue holds 16 commands; when it's full, commands get `429`. The page polls `/api/status` every second for the queue and the log.
 
 | Endpoint | Purpose |
 |---|---|
@@ -101,7 +103,7 @@ The shade commands use the same names as HD_Remote_Clone's firmware, and the web
 | `POST /api/preset/delete` | `name=<preset>` |
 | `POST /api/clear` | Drop queued jobs; the one sending finishes |
 
-Errors come back as `400` (bad request), `404` (no such preset) or `429` (queue full) with `{"ok":false,"error":"..."}`.
+Errors come back as `400` (bad request), `404` (no such preset) or `429` (queue full) with `{"ok":false,"error":"..."}`. With a `web pass` set, every route answers `401` until the browser logs in (user `admin`).
 
 ## How it works
 
@@ -136,9 +138,11 @@ The frame formats and timings come from HD_Remote_Clone's [RF_PROTOCOL.md](https
 
 ## Next steps
 
-1. Measure the miss rate over many more commands.
-2. Give the bridge its own remote ID and pair it with the groups it controls.
-3. Decide what moves into HD_Remote_Clone, and how.
+1. Make the hostname configurable over serial, saved in flash (planned).
+2. Run the first user test and turn what the tester runs into into page changes: checklist in [docs/FEATURE_EXPLORATION.md](docs/FEATURE_EXPLORATION.md#first-user-test).
+3. Measure the miss rate over many more commands.
+4. Give the bridge its own remote ID and pair it with the groups it controls.
+5. Decide what moves into HD_Remote_Clone, and how.
 
 ## License
 
