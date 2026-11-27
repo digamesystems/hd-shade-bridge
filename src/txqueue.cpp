@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "txqueue.h"
 #include <Preferences.h>
+#include <merge.h>
 #include "radio.h"
 #include <stdarg.h>
 
@@ -144,68 +145,49 @@ Result group(int g, bool up) {
   return OK;
 }
 
-// Queues a position, merged with the positions already waiting
-// (docs/FEATURE_EXPLORATION.md, "Combine commands to save air time"):
-//  1. The new groups are taken out of waiting jobs with another target:
-//     positions are absolute, so only a group's latest target matters. A job
-//     left with no groups is dropped.
-//  2. If a waiting job has the same target, the groups join it: one frame.
-//  3. Otherwise it's a new job at the end.
-// Only waiting jobs after the last waiting group command are touched, so a
-// position never moves past an up/down for the same shade. The job being sent
-// is never changed. src: the preset it comes from, or nullptr.
+// Queues a position, merged with the positions already waiting. The rule is
+// bridge::planPosition() (lib/bridgecore/merge.*, host-tested); this applies
+// its edits to the queue, keeping labels and the log. src: the preset it
+// comes from, or nullptr.
 static Result enqueuePos(uint8_t mask, uint8_t pos, const char *src) {
   if (!src) src = "";
-  int first = stepIdx >= 0 ? 1 : 0;  // skip the job being sent
-  int lo = first;
-  for (int k = count - 1; k >= first; k--)
-    if (!jobAt(k).isPos) {
-      lo = k + 1;
-      break;
+  bridge::QueuedJob q[MAX_JOBS];
+  for (int k = 0; k < count; k++) q[k] = {jobAt(k).isPos, jobAt(k).mask, jobAt(k).pos};
+  int first = stepIdx >= 0 ? 1 : 0;  // the job being sent isn't waiting
+  bridge::MergePlan plan = bridge::planPosition(q, count, first, MAX_JOBS, mask, pos);
+  if (plan.full) return FULL;
+
+  for (int e = 0; e < plan.n; e++) {
+    const bridge::Edit &ed = plan.edits[e];
+    switch (ed.kind) {
+      case bridge::EditKind::Trim: {
+        Job &j = jobAt(ed.index);
+        String before = j.label;
+        setPos(j, ed.mask, j.pos);
+        log("trimmed: %s, now %s", before.c_str(), j.label);
+        break;
+      }
+      case bridge::EditKind::Drop:
+        log("replaced: %s", jobAt(ed.index).label);
+        removeAt(ed.index);
+        break;
+      case bridge::EditKind::Join: {
+        Job &j = jobAt(ed.index);
+        if (strcmp(j.src, src) != 0) j.src[0] = 0;  // from different sources: no name
+        setPos(j, ed.mask, pos);
+        log("merged: %s to %u, now %s", maskText(mask).c_str(), (unsigned)pos, j.label);
+        break;
+      }
+      case bridge::EditKind::Append: {
+        Job *j = newJob();  // room checked by the planner
+        strlcpy(j->src, src, sizeof(j->src));
+        setPos(*j, ed.mask, pos);
+        commit();
+        log("queued: %s", j->label);
+        break;
+      }
     }
-
-  // Room check before changing anything: a new job is needed unless one joins,
-  // and step 1 may free slots.
-  int join = -1, emptied = 0;
-  for (int k = lo; k < count; k++) {
-    const Job &j = jobAt(k);
-    if (j.pos == pos) join = k;
-    else if ((j.mask & mask) && !(j.mask & ~mask)) emptied++;
   }
-  if (join < 0 && count - emptied >= MAX_JOBS) return FULL;
-
-  // 1. Take the groups out of jobs with another target.
-  for (int k = lo; k < count; k++) {
-    Job &j = jobAt(k);
-    if (j.pos == pos || !(j.mask & mask)) continue;
-    String before = j.label;
-    uint8_t left = j.mask & ~mask;
-    if (!left) {
-      log("replaced: %s", before.c_str());
-      removeAt(k);
-      if (join > k) join--;
-      k--;
-    } else {
-      setPos(j, left, j.pos);
-      log("trimmed: %s, now %s", before.c_str(), j.label);
-    }
-  }
-
-  // 2. Join a job with the same target.
-  if (join >= 0) {
-    Job &j = jobAt(join);
-    if (strcmp(j.src, src) != 0) j.src[0] = 0;  // from different sources: no name
-    setPos(j, j.mask | mask, pos);
-    log("merged: %s to %u, now %s", maskText(mask).c_str(), (unsigned)pos, j.label);
-    return OK;
-  }
-
-  // 3. New job.
-  Job *j = newJob();  // room checked above
-  strlcpy(j->src, src, sizeof(j->src));
-  setPos(*j, mask, pos);
-  commit();
-  log("queued: %s", j->label);
   return OK;
 }
 

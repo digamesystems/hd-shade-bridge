@@ -40,7 +40,8 @@ One frame carries one position, so only commands with the same target can share 
 
 **Built (2026-11-25, fw 0.4.0-dryrun):**
 
-- The queue merges positions as above (`enqueuePos` in [src/txqueue.cpp](../src/txqueue.cpp)). One addition: only waiting positions after the last waiting group (up/down) command are touched, so a position never moves past an up/down for the same shade. The page doesn't send group commands, but the serial `grp` does.
+- The queue merges positions as above. The rule is `planPosition()` in [lib/bridgecore/src/merge.cpp](../lib/bridgecore/src/merge.cpp), with host tests for each case in the table and the edge cases ([test/test_native_merge](../test/test_native_merge/test_main.cpp), 2026-11-27); `enqueuePos()` in [src/txqueue.cpp](../src/txqueue.cpp) applies its edits to the queue. Checked on the board the same day, in dry run (`radio off`): with G1 to 100 sending, G2 to 200 and G4 to 200 joined into one job; G2 to 50 trimmed it to G4 to 200 and queued G2 to 50; G4 to 50 then replaced G4 to 200 and joined, leaving one job, G2+G4 to 50.
+- **Drags snap to whole percentages** (fw 0.5.2, 2026-11-27). Found on the board: a preset of G2 and G4 both showing 63% held positions 161 and 160, so it went out as two frames. Equal-looking shades now get equal positions, and merge. One addition: only waiting positions after the last waiting group (up/down) command are touched, so a position never moves past an up/down for the same shade. The page doesn't send group commands, but the serial `grp` does.
 - Presets are queued one position per job, so they merge too. A job keeps the preset's name in its label ("Bedtime: G2+G4 to 255") unless it merges with a command from elsewhere.
 - The log says what happened: `queued`, `merged … now …`, `trimmed … now …`, `replaced`. The page's Activity card and the serial `queue` command list the waiting jobs.
 - Presets saved from the page already store groups at the same position as one step. The three seeded presets are kept as HD_Remote_Clone defines them; queue merging now gives `Bedtime` its one-frame saving anyway.
@@ -63,3 +64,55 @@ One frame carries one position, so only commands with the same target can share 
 - **Where they get stuck**, in their own words.
 
 **Results:** not yet recorded. Add what the tester ran into here, and the changes that follow from it.
+
+## Schedules and a sun trigger
+
+**Idea (John, 2026-11-27):** run presets on a schedule. Bedtime and Waketime by clock time; Sunset mode when the sun gets low enough to glare through the west-facing windows. John wants to try the options; **nothing is decided** beyond the items marked as his below.
+
+**What John said (2026-11-27):**
+
+- Sunset mode is for cutting glare through the west-facing windows.
+- Bedtime and Waketime are tied to clock time.
+- Setup must stay simple for a non-technical user.
+- **Learning the trigger** (his idea): when someone sets the shades for glare, the time tells the bridge where the sun is, so the threshold can be learned instead of entered.
+- **The user's own command wins** (his current view): if someone moves a shade after a scheduled preset fires, the schedule's follow-up resend leaves that group alone.
+- **No replay after a reboot** (his current inclination): a missed event isn't sent late; the bridge waits for the next scheduled change, since people may have used the handheld meanwhile.
+- **Decided:** tests use San José International Airport (SJC) as their location, never the house's coordinates. The form-post security fix waits until later.
+
+**What a schedule needs (Proposed, Claude):**
+
+1. **The time:** the ESP32's NTP client (`configTzTime`) with a POSIX time-zone string such as `PST8PDT,M3.2.0,M11.1.0`, which handles daylight saving. No schedule fires until the time is known after a boot.
+2. **The sun's position, computed on the board:** NOAA's solar position formula (about 50 lines, accurate to about a minute) from date, time, latitude and longitude, giving elevation and azimuth. No internet service. It goes in `lib/bridgecore` with host tests at SJC, checked against NOAA's solar calculator for a few dates.
+3. **Schedule entries in flash**, stored like the presets: a preset, a trigger (a clock time, or the sun falling below *N*° in the afternoon), days of the week, on/off.
+4. **A once-a-minute check.** Each entry fires at most once a day. The sun trigger fires on the afternoon *crossing* below *N* (falling, after solar noon), not on "below *N*", so a reboot in the evening doesn't fire it again.
+5. **One resend** about a minute later, to cover missed commands (about 1 in 35 on the handheld), skipping any group the user has moved since. Scheduled sends use the same queue, merging and 5 s cap as everything else. Open: whether a resend counts as RF protocol behaviour under the rule in CLAUDE.md (like merging, it chooses which commands to send, not how).
+6. **The page shows each entry's next run**, e.g. "Sunset mode: today 3:52 pm": also the easiest check that the time and location are right.
+
+**Sunset mode: trigger on sun elevation (Proposed, Claude).** A fixed offset such as "1 hour before sunset" drifts across the year. Glare starts when the sun gets low enough to reach under the eaves, at roughly the same elevation all year, so the trigger is "run Sunset when the sun falls below *N*° in the afternoon". An azimuth condition could be added if a window proves partly shaded; not needed to start. What happens at sunset itself, if anything, is John's call. It fires on cloudy days too.
+
+**Learning *N* (Proposed, Claude, from John's idea):** start with *N* entered by hand. Then log the sun's elevation and azimuth each time Sunset is run by hand; after several runs, suggest a threshold a few degrees above them (people notice glare after it starts), and let the user accept it. Keep the readings, not just the number. A "learn from now" button is the same thing done once.
+
+**Location setup, kept simple (Proposed, Claude):**
+
+- **Time zone in one tap:** the phone's browser knows it (`Intl.DateTimeFormat().resolvedOptions().timeZone`, e.g. `America/Los_Angeles`); a small table maps it to a POSIX string.
+- **Coordinates: two number fields**, with a hint to copy them from a map. Whole degrees are enough (below). Phone geolocation won't work: browsers allow it only on HTTPS pages, and the bridge serves plain HTTP.
+- **Later, optional:** an address box that asks OpenStreetMap's free geocoder from the phone's browser, so the bridge never touches the internet. Google's geocoding API was set aside: it needs a key and billing, and the key would sit on a device built from a public repo.
+- Serial fallbacks, like the Wi-Fi setup: e.g. `tz America/Los_Angeles`, `loc 37 -122`.
+
+**How rough can the location be?** A simulation in the review chat (simplified NOAA formula, 30 s steps): true location San José (37.34° N, 121.89° W), a 15° threshold learned once on 1 December in the bridge's assumed coordinates, then used all year. Minutes from the true 15° crossing (negative = early):
+
+| Bridge assumes | Learned N | 1 Mar | 1 Jun | 1 Sep |
+|---|---|---|---|---|
+| Exact | 15.0° | 0 min | 0 min | +0.5 min |
+| Whole degrees (37, −122) | 15.3° | −0.5 min | −1.5 min | −0.5 min |
+| Longitude off by 3.7° | 12.8° | −3 min | −3.5 min | −3.5 min |
+| Latitude off by 3.3° | 17.2° | −5.5 min | −16 min | −10.5 min |
+| The time zone's city (Los Angeles) | 15.0° | −8 min | −19.5 min | −14 min |
+
+Whole-degree coordinates stay within about 2 minutes; defaulting to the time zone's city drifts by up to 20 minutes by summer, too much for glare. Rerun this as a host test once the bridge has its own sun code.
+
+**Order, if built (Proposed, Claude):** (1) NTP, time zone, clock schedules and "next run" on the page; (2) sun position and the elevation trigger; (3) learning *N*. Each step is useful alone. The page part should wait for the first user test.
+
+**Open for John:** the location setup; how *N* is learned; what Sunset mode does at sunset; whether resends count as RF protocol behaviour.
+
+Background: the original Platinum App Bridge timed scenes on the bridge itself, with weekday/weekend times and, from 2014, fixed offsets from sunrise or sunset, which reviewers found didn't fit their terrain.

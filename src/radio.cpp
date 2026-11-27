@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Checked against HD_Remote_Clone 30e0c3f (2026-11-26): src/rf_tools.cpp
+// Checked against HD_Remote_Clone 96e64da (2026-11-27; RF code unchanged since 30e0c3f): src/rf_tools.cpp
 // prepareWake(), rotateBurst(), sendGroup(), sendPosition(); include/pins.h.
 #include "radio.h"
 #include <Preferences.h>

@@ -133,6 +133,10 @@ async function post(path,data,errEl){
 const types={};  // group -> 'top-down' | 'bottom-up', from /api/groups
 // Share of the window the fabric covers, 0..100, for rail height p (0 bottom .. 255 top).
 const pct=(g,p)=>Math.round(100*(types[g]==='top-down'?255-p:p)/255);
+// The rail height for exactly the whole percentage p shows, so two shades that
+// read the same % get the same position (and presets saved from them share a
+// frame on air). pct(g,snap(g,p)) === pct(g,p).
+const snap=(g,p)=>{const r=Math.round(pct(g,p)*255/100);return types[g]==='top-down'?255-r:r;};
 const cur={};    // group -> position shown (rail height 0..255), -1 unknown
 function show(g,p){
   const v=$('#v'+g), f=$('#f'+g), w=$('#w'+g);
@@ -155,9 +159,10 @@ function column(g){
     ' aria-valuemax="255" aria-label="GRP '+g+' position"><div class="fab '+(td?'td':'bu')+'" id="f'+g+'"></div></div>';
   const w=el.querySelector('.win');
   // Pointer: press anywhere in the window to put the rail there, drag, send on release.
+  // Snapped to whole percentages (snap above).
   const at=e=>{const r=w.getBoundingClientRect();
     const f=Math.min(1,Math.max(0,(e.clientY-r.top)/r.height));
-    touched[g]=Date.now();show(g,Math.round((1-f)*255));};
+    touched[g]=Date.now();show(g,snap(g,Math.round((1-f)*255)));};
   w.onpointerdown=e=>{w.setPointerCapture(e.pointerId);w.classList.add('drag');at(e);};
   w.onpointermove=e=>{if(w.classList.contains('drag'))at(e);};
   const end=()=>{if(!w.classList.contains('drag'))return;w.classList.remove('drag');send(g);};
@@ -169,7 +174,7 @@ function column(g){
     const step={ArrowUp:8,ArrowRight:8,ArrowDown:-8,ArrowLeft:-8,PageUp:32,PageDown:-32}[e.key];
     let p=cur[g]>=0?cur[g]:128;
     if(step)p+=step;else if(e.key==='Home')p=255;else if(e.key==='End')p=0;else return;
-    e.preventDefault();show(g,Math.min(255,Math.max(0,p)));touched[g]=Date.now();
+    e.preventDefault();show(g,snap(g,Math.min(255,Math.max(0,p))));touched[g]=Date.now();
     clearTimeout(kt);kt=setTimeout(()=>send(g),600);
   };
   return el;

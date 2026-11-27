@@ -1,0 +1,7 @@
+{
+  "name": "bridgecore",
+  "version": "0.1.0",
+  "description": "Hardware-independent logic for hd-shade-bridge (host-testable with `pio test -e native`)",
+  "platforms": "*",
+  "frameworks": "*"
+}

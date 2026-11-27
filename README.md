@@ -29,7 +29,7 @@ The bridge transmits when it finds an nRF24 and a remote ID that HD_Remote_Clone
 
 The page follows the device's light or dark setting.
 
-- **One column per group (GRP 1–4).** Each shows the shade as a window with its fabric, and the share of the window the fabric covers ("67%"). Drag the fabric's rail, or tap where you want it, and let go to send that position. There are no up/down arrows: a group command runs a shade all the way to a limit without the page knowing, while a drag always shows where the rail was sent.
+- **One column per group (GRP 1–4).** Each shows the shade as a window with its fabric, and the share of the window the fabric covers ("67%"). Drag the fabric's rail, or tap where you want it, and let go to send that position. Positions snap to whole percentages, so two shades that read the same % get exactly the same position, and a preset saved from them sends them in one frame. There are no up/down arrows: a group command runs a shade all the way to a limit without the page knowing, while a drag always shows where the rail was sent.
 - **Shade types.** In this house, groups 1 and 3 are top-down shades and groups 2 and 4 are bottom-up, so the fabric is drawn hanging from the top or rising from the bottom. The types are set in `GROUP_TYPE` in [src/web.cpp](src/web.cpp).
 - **Presets:** tap one to run it. To make one, set the shades with the drag controls, open **Save current positions as a preset**, give it a name and tick the groups it should set; unticked groups are left alone when it runs. Groups saved at the same position share one frame on air. **Edit** switches to deleting: tap a preset, confirm, then **Done**. Up to 12 presets, names up to 24 characters, kept in the ESP32's flash. The first boot adds Bedtime, Waketime and Sunset, HD_Remote_Clone's presets; they can be deleted like any other.
 - **Activity:** the queue (waiting commands listed in order), a progress bar, a log, and a button to clear the queue. With the radio live, the board can't answer the page while a command is on air (see [How it works](#how-it-works)), so the page doesn't show a command as sending: it pauses, then the log shows the command done. "Sending" and the moving progress bar only appear in dry run.
@@ -49,6 +49,7 @@ Needs [PlatformIO](https://platformio.org/). `platformio.ini` expects the board 
 ```
 pio run -t upload      # build and flash
 pio device monitor     # serial console, 115200 baud
+pio test -e native     # host tests (needs a C++ compiler on the PC, e.g. MSYS2's g++)
 ```
 
 Then, in the console:
@@ -111,7 +112,9 @@ Errors come back as `400` (bad request), `404` (no such preset) or `429` (queue 
 src/main.cpp      serial console, setup and loop
 src/net.*         Wi-Fi client, saved settings, mDNS name
 src/radio.*       nRF24 transmitter, as HD_Remote_Clone's rf_tools.cpp
-src/txqueue.*     send queue, merging, and presets kept in flash
+src/txqueue.*     send queue and presets kept in flash
+lib/bridgecore/   logic with no Arduino code, tested on the PC: the merge rule
+test/             host tests (`pio test -e native`)
 src/version.h     firmware version
 src/web.*         HTTP routes, optional login, shade types
 src/page.h        the page: HTML, CSS and script in one string

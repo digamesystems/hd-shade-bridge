@@ -7,10 +7,11 @@ This file holds rules and stable facts only. Status, plans and results live in t
 ## Working conventions
 - **Shorthand commands** (as in HD_Remote_Clone; letters combine, e.g. "cp", "dcp", run in the order d → c → p):
   - **"d"**: deploy. **First run the RF check** (see **RF protocol**): if anything differs from HD_Remote_Clone, stop, report it, and don't upload. Then close any serial monitor (below), `pio run -t upload` (builds first; a failed build uploads nothing), then reopen the monitor in its own window: `Start-Process pio -ArgumentList 'device','monitor' -WorkingDirectory <repo>`. Then check the board over HTTP (below).
-  - **"c"**: commit all current changes with a descriptive message. Run `pio run` first and halt if it fails: never commit a broken build. If the changes touch code, the **doc scan** (below) must have been done for them; do it now if not. No test suite yet.
+  - **"c"**: commit all current changes with a descriptive message. Run `pio run` first and halt if it fails: never commit a broken build. If the changes touch code, the **doc scan** (below) must have been done for them; do it now if not. If they touch `lib/` or `test/`, run "t1" too and halt if it fails (John, 2026-11-27).
+  - **"t1"**: host tests, `pio test -e native` (outside the sandbox). Needs MSYS2's g++ on the PC.
   - **"p"**: push to `origin/main` (**public** repo digamesystems/hd-shade-bridge). No CI yet.
 - **Serial port:** `upload_port` / `monitor_port` in `platformio.ini` (COM11). The number changes if the board is plugged into another USB port: if COM11 is missing, look for the "Silicon Labs CP210x" entry (`Get-CimInstance Win32_PnPEntity`) and ask before changing `platformio.ini`. Run every `pio` command (builds too) and any serial access **outside the Bash sandbox**: inside it the port reads as missing.
-- **Build folder and Dropbox:** the repo is inside Dropbox. Builds failed at random with `ranlib`/`ar: unable to rename … File exists`, inside and outside the sandbox, most likely because Dropbox locked newly written files in `.pio/`. Since 2026-11-26 `.pio/` carries Dropbox's ignore marker (`Set-Content -Path .pio -Stream com.dropbox.ignored -Value 1`). If the error comes back, check the marker is still set (deleting `.pio/` removes it), then suspect Windows Defender.
+- **Build folder and Dropbox:** the repo is inside Dropbox. Builds failed at random with `ranlib`/`ar: unable to rename … File exists`, inside and outside the sandbox, and a rerun always got through. `.pio/` has carried Dropbox's ignore marker since 2026-11-26 (`Set-Content -Path .pio -Stream com.dropbox.ignored -Value 1`; deleting `.pio/` removes it), but the error came back on 2026-11-27 with the marker set, so Windows Defender scanning new files is now the likelier cause. Until that's settled, retry the build when it's this error.
 - **Closing the serial monitor** (John, 2026-11-26): close a running `pio device monitor` whenever the serial port is needed (upload, reading the console, sending a command) without asking, and reopen it afterwards. Use exactly `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/close-monitor.ps1` from the repo root (PowerShell tool); that command is allowed in `.claude/settings.json`, and the script stops nothing but `pio device monitor` processes.
 - **Checking on the board:** after flashing, exercise the change over the JSON API with `curl` (outside the sandbox) at the board's address: `wifi status` on serial prints it (`http://shade-bridge.local/` also works). In dry run this moves nothing, so it's safe. Clean up test data afterwards (e.g. delete test presets) and say what was left changed.
 - **Firmware version** (John, 2026-11-26): `FW_VERSION` in `src/version.h`, `X.Y.Z`; bump the last number with each new feature (0.5.0 → 0.5.1 → … → 0.5.10). Shown at boot, in `help`, at the foot of the web page and in `/api/status`.
@@ -21,6 +22,8 @@ This file holds rules and stable facts only. Status, plans and results live in t
   - Code comments and help text that describe behaviour (`help` in `src/main.cpp`, file headers).
   In the summary, say what was checked and what was changed, or that nothing was stale.
 - **Decisions come only from John.** Record a project decision (docs, this file, commit messages, code comments, memory) only when John states it directly ("decided", "go with X", or an equally clear instruction). Discussion, a question, or agreeing something is reasonable is not a decision; if something looks decided, quote the wording to record and ask. Attribute ideas and decisions with name and date, e.g. "Idea (John, 2026-11-25)"; label Claude's input "Proposed (Claude)" or "Recommended (Claude)". Facts John reports are observations, recorded as reported.
+- **Host-testable logic in `lib/bridgecore/`** (as HD_Remote_Clone's `lib/hdcore/`): code with no Arduino calls, with Unity tests under `test/test_native_*`. The merge rule is there; the sun-position code goes there if schedules are built.
+- **Test location** (John, 2026-11-27): tests that need a place on Earth use San José International Airport (SJC, about 37.36° N, 121.93° W). Never John's home coordinates: they stay in the board's flash, out of this public repo.
 - **Licensing:** `GPL-2.0-or-later` (`LICENSE`), matching HD_Remote_Clone's firmware so code can move between them. Every new source file starts with `// SPDX-License-Identifier: GPL-2.0-or-later` (`#` for scripts).
 
 ## Design rules
@@ -61,7 +64,8 @@ Report the HD_Remote_Clone commit checked against, and update the "Checked again
 |---|---|
 | Status, page, serial commands, Web API, open questions, next steps | `README.md` |
 | Ideas being explored, and what's built of them | `docs/FEATURE_EXPLORATION.md` |
-| Send queue, merging, presets in flash | `src/txqueue.*` |
+| Send queue, presets in flash | `src/txqueue.*` |
+| The merge rule (host-tested) | `lib/bridgecore/src/merge.*`, `test/test_native_merge/` |
 | HTTP routes, login, shade types | `src/web.*` |
 | The page (HTML/CSS/JS in one string) | `src/page.h` |
 | Serial console, setup, loop | `src/main.cpp` |
